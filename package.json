@@ -1,6 +1,6 @@
 {
   "name": "flight-battle",
-  "version": "64.0.0",
+  "version": "65.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
