@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "005cb13626440ab7a8fb8696572ca2bc": {
+      "id": "005cb13626440ab7a8fb8696572ca2bc",
+      "tokenHash": "3a96e6ec95d1c3a70a10b3996ad10d1b696499bceff410e5539ad62bb8bf7daa",
+      "code": "621311",
+      "name": "v",
+      "friends": [],
+      "requestsIn": [],
+      "requestsOut": [],
+      "status": "lobby",
+      "roomCode": "",
+      "mode": "",
+      "roomState": ""
+    }
+  }
+}

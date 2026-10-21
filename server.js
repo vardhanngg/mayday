@@ -1,0 +1,465 @@
+const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
+const {WebSocketServer}=require('ws');
+const BUILD_VERSION='v64.0-online-ready';
+const PORT=Number(process.env.PORT||3000),WIN_ROUNDS=6,WIN_KILLS=10,HP={fighter:75,balanced:100,heavy:150,interceptor:90,striker:175},PROT=3000,BREAK=5000,RESPAWN_DELAY=3500,RECONNECT_GRACE=600000,CLASH_STEALTH=4000,LOCK_RANGE=4200,MISSILE_RANGE=5200,LOCK_DURATION=3000,LOCK_HEARTBEAT_TIMEOUT=850;
+const PLANE_SPEED_MULT={fighter:1.15,balanced:1,heavy:.88,interceptor:1.34,striker:.82};
+const planeNormalMaxSpeed=p=>25+200*(PLANE_SPEED_MULT[p?.ty]||1);
+const TEAM_DEFS=[
+  {id:'blue',name:'Blue',color:'#2a6fe0'},
+  {id:'red',name:'Red',color:'#e03030'},
+  {id:'green',name:'Green',color:'#20b85a'},
+  {id:'yellow',name:'Yellow',color:'#f1c40f'},
+  {id:'purple',name:'Purple',color:'#9b59b6'},
+  {id:'orange',name:'Orange',color:'#f39c12'}
+];
+const COLOR_DEFS=[
+  {id:'electric-red',name:'Electric Red',color:'#FF3B30'},
+  {id:'vermilion',name:'Vermilion',color:'#FF6B00'},
+  {id:'orange',name:'Orange',color:'#FF9500'},
+  {id:'gold',name:'Gold',color:'#F2C94C'},
+  {id:'yellow',name:'Yellow',color:'#FFD60A'},
+  {id:'lime',name:'Lime',color:'#A8E063'},
+  {id:'green',name:'Green',color:'#34C759'},
+  {id:'emerald',name:'Emerald',color:'#00A878'},
+  {id:'teal',name:'Teal',color:'#00A6A6'},
+  {id:'cyan',name:'Cyan',color:'#00C2FF'},
+  {id:'sky',name:'Sky',color:'#4DABF7'},
+  {id:'blue',name:'Blue',color:'#2F80ED'},
+  {id:'royal',name:'Royal Blue',color:'#5B5FEF'},
+  {id:'indigo',name:'Indigo',color:'#3F51B5'},
+  {id:'violet',name:'Violet',color:'#7A5AF8'},
+  {id:'purple',name:'Purple',color:'#9B51E0'},
+  {id:'magenta',name:'Magenta',color:'#D946EF'},
+  {id:'pink',name:'Pink',color:'#FF5E9A'},
+  {id:'rose',name:'Rose',color:'#E83E8C'},
+  {id:'brown',name:'Earth',color:'#A15C38'}
+];
+const COLOR_BY_ID=Object.fromEntries(COLOR_DEFS.map(c=>[c.id,c]));
+const COLOR_BY_INDEX=Object.fromEntries(COLOR_DEFS.map((c,i)=>[i,c]));
+const TEAM_BY_ID=Object.fromEntries(TEAM_DEFS.map(t=>[t.id,t]));
+const activeTeams=r=>TEAM_DEFS.slice(0,r.teamCount||2);
+const teamIds=r=>activeTeams(r).map(t=>t.id);
+const TEAMCOL=Object.fromEntries(TEAM_DEFS.map(t=>[t.id,t.color]));
+const TEAMNAME=Object.fromEntries(TEAM_DEFS.map(t=>[t.id,t.name]));
+const page=()=>fs.readFileSync(path.join(__dirname,'public','index.html'));
+const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg'};
+const server=http.createServer((req,res)=>{
+  try{
+    const cleanPath=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`).pathname;
+    if(cleanPath==='/api/version'){
+      res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+      return res.end(JSON.stringify({version:BUILD_VERSION,serverTime:Date.now()}));
+    }
+    if(cleanPath==='/healthz') {
+      res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+      return res.end(JSON.stringify({status:'ok',version:BUILD_VERSION,uptime:Math.round(process.uptime())}));
+    }
+    if(cleanPath==='/api/games'){
+      const games=Object.values(rooms).filter(r=>r.state!=='over'&&Object.keys(r.players).length>0).map(r=>{
+        const host=r.players[r.host];
+        return {roomId:r.code,mode:r.mode,state:r.state,players:list(r).length,maxPlayers:r.mode==='clash'?null:20,teams:r.teamCount||2,lives:r.lives||1,host:host?.n||'Host'};
+      }).sort((a,b)=>a.state===b.state?b.players-a.players:(a.state==='playing'?-1:a.state==='between'&&b.state!=='playing'?-1:1));
+      res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+      return res.end(JSON.stringify({games}));
+    }
+    const rel=cleanPath==='/'||cleanPath==='/index.html'?'index.html':cleanPath.replace(/^\/+/, '');
+    const full=path.resolve(__dirname,'public',rel);
+    const pubRoot=path.resolve(__dirname,'public');
+    if(full!==pubRoot&&!full.startsWith(pubRoot+path.sep))return res.writeHead(403).end('Forbidden');
+    if(!fs.existsSync(full)||!fs.statSync(full).isFile())return res.writeHead(404).end('Not found');
+    const ext=path.extname(full).toLowerCase();
+    res.writeHead(200,{'Content-Type':MIME[ext]||'application/octet-stream','Cache-Control':ext==='.wav'?'public, max-age=3600':'no-store, no-cache, must-revalidate'});
+    fs.createReadStream(full).pipe(res);
+  }catch{res.writeHead(500).end('Server error')}
+});
+const wss=new WebSocketServer({server,maxPayload:128*1024,perMessageDeflate:false});
+const rooms={};let nextId=1;
+// Local social layer: profiles/friendships persist in data/social.json, while online presence
+// and invitations are live WebSocket state. This is intended for local/LAN play, not public auth.
+const SOCIAL_DIR=path.resolve(process.env.MAYDAY_DATA_DIR||path.join(__dirname,'data')),SOCIAL_FILE=path.join(SOCIAL_DIR,'social.json');
+fs.mkdirSync(SOCIAL_DIR,{recursive:true});
+let socialStore={profiles:{}};
+try{const saved=JSON.parse(fs.readFileSync(SOCIAL_FILE,'utf8'));if(saved&&saved.profiles&&typeof saved.profiles==='object')socialStore=saved}catch{}
+const socialSockets=new Map(),pendingSocialInvites=new Map();
+const hashToken=t=>crypto.createHash('sha256').update(String(t||'')).digest('hex');
+function saveSocial(){try{const tmp=SOCIAL_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(socialStore,null,2));fs.renameSync(tmp,SOCIAL_FILE)}catch(e){console.error('Could not save MAYDAY social data:',e.message)}}
+function safeName(n){return String(n||'Pilot').replace(/[<>\\\"']/g,'').trim().slice(0,14)||'Pilot'}
+function makeGameUid(reserved=new Set(Object.values(socialStore.profiles).map(p=>String(p.code||'')))){let uid;do{uid=String(crypto.randomInt(100000,1000000))}while(reserved.has(uid));reserved.add(uid);return uid}
+// Migrate older alphanumeric Friend Codes to six-digit numeric Game UIDs at startup.
+// Internal profile IDs remain unchanged, so accepted friendships and pending requests survive.
+function migrateGameUids(){const used=new Set();let changed=false;for(const p of Object.values(socialStore.profiles)){const current=String(p.code||'');if(/^\d{6}$/.test(current)&&!used.has(current)){used.add(current);continue}p.code=makeGameUid(used);changed=true}if(changed)saveSocial()}
+migrateGameUids();
+function findProfileByCode(code){const c=String(code||'').trim();if(!/^\d{6}$/.test(c))return null;return Object.values(socialStore.profiles).find(p=>String(p.code)===c)||null}
+function authProfile(id,token){const p=socialStore.profiles[String(id||'')];if(!p||!token||!p.tokenHash)return null;const a=Buffer.from(hashToken(token)),b=Buffer.from(p.tokenHash);return a.length===b.length&&crypto.timingSafeEqual(a,b)?p:null}
+function socialPublic(p){
+  const sw=socialSockets.get(p.id),online=!!(sw&&sw.readyState===1);
+  let activeRoom=null;
+  if(online){const preferred=rooms[p.roomCode];activeRoom=preferred&&roomContainsProfile(preferred,p.id)?preferred:(Object.values(rooms).find(r=>roomContainsProfile(r,p.id))||null)}
+  let status='offline',roomCode='',mode='',roomState='';
+  if(online){
+    if(activeRoom){roomCode=activeRoom.code;mode=activeRoom.mode;roomState=activeRoom.state;const spectator=[...(activeRoom.spectators||[])].some(client=>client.profileId===p.id);status=activeRoom.state==='over'?'results':activeRoom.state==='playing'?(spectator?'spectating':'playing'):activeRoom.state==='between'?(spectator?'spectating':'between'):'room'}
+    else {status='lobby'}
+  }
+  return {id:p.id,code:p.code,name:p.name,online,status,roomCode,mode,roomState}
+}
+function socialPayload(p){return {t:'socialState',profile:{id:p.id,code:p.code,name:p.name},friends:(p.friends||[]).map(id=>socialStore.profiles[id]).filter(Boolean).map(socialPublic).sort((a,b)=>Number(b.online)-Number(a.online)||a.name.localeCompare(b.name)),incomingRequests:(p.requestsIn||[]).map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,code:x.code,name:x.name})),outgoingRequests:(p.requestsOut||[]).map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,code:x.code,name:x.name}))}}
+function sendSocialState(p){const sw=socialSockets.get(p?.id);if(sw&&sw.readyState===1)send(sw,socialPayload(p))}
+function refreshSocialNeighborhood(p){if(!p)return;sendSocialState(p);for(const id of [...(p.friends||[]),...(p.requestsIn||[]),...(p.requestsOut||[])]){const other=socialStore.profiles[id];if(other)sendSocialState(other)}}
+function createSocialProfile(name){const id=crypto.randomBytes(16).toString('hex'),token=crypto.randomBytes(32).toString('hex');const profile={id,tokenHash:hashToken(token),code:makeGameUid(),name:safeName(name),friends:[],requestsIn:[],requestsOut:[],status:'lobby',roomCode:'',mode:'',roomState:''};socialStore.profiles[id]=profile;saveSocial();return {profile,token}}
+function roomContainsProfile(r,profileId){return !!r&&([...list(r)].some(p=>p.profileId===profileId&&p.connected!==false)||[...(r.spectators||[])].some(sw=>sw.profileId===profileId))}
+function updateProfileStatus(p,m){
+  const status=['lobby','room','playing','spectating','between','results'].includes(m.status)?m.status:'online';
+  if(status==='lobby'){p.status='lobby';p.roomCode='';p.mode='';p.roomState='';refreshSocialNeighborhood(p);return}
+  const code=String(m.roomCode||'').toUpperCase(),r=rooms[code];
+  if(!r||!roomContainsProfile(r,p.id)){p.status='online';p.roomCode='';p.mode='';p.roomState='';refreshSocialNeighborhood(p);return}
+  p.status=status;p.roomCode=code;p.mode=r.mode;p.roomState=r.state;refreshSocialNeighborhood(p)
+}
+function detachSocketFromRoom(ws){
+  const code=ws.room,r=code&&rooms[code];
+  if(!r){ws.room=null;ws.spectator=false;ws.spectatorRoom=null;delete ws.id;return}
+  if(ws.spectator){r.spectators?.delete(ws);ws.spectator=false;ws.spectatorRoom=null;ws.room=null;delete ws.id;broadcastGames();return}
+  const id=ws.id,p=r.players[id];
+  if(p&&p.ws===ws){clearTimeout(p.reconnectTimer);clearTimeout(p.respawnTimer);delete r.players[id];if(r.host===id)r.host=Object.keys(r.players).length?Number(Object.keys(r.players)[0]):null}
+  ws.room=null;ws.spectator=false;ws.spectatorRoom=null;delete ws.id;delete ws.sessionToken;
+  if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];broadcastGames();return}
+  rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();
+}
+function handleSocialMessage(ws,m){
+  if(m.t==='socialHello'){
+    let profile=null,token='';
+    if(m.profileId&&m.profileToken){profile=authProfile(m.profileId,m.profileToken);token=String(m.profileToken);if(!profile){send(ws,{t:'socialAuthError'});return}}
+    else {const created=createSocialProfile(m.name);profile=created.profile;token=created.token}
+    const newName=safeName(m.name||profile.name);if(profile.name!==newName){profile.name=newName;saveSocial()}
+    const old=socialSockets.get(profile.id);if(old&&old!==ws){old._socialReplaced=true;try{old.close(4001,'social session replaced')}catch{}}
+    ws.socialProfileId=profile.id;socialSockets.set(profile.id,ws);
+    const active=Object.values(rooms).find(r=>roomContainsProfile(r,profile.id));
+    if(active){profile.roomCode=active.code;profile.mode=active.mode;profile.roomState=active.state;profile.status=[...active.spectators].some(sw=>sw.profileId===profile.id)?'spectating':(active.state==='playing'?'playing':active.state==='between'?'between':active.state==='over'?'results':'room')}
+    else {profile.status='lobby';profile.roomCode='';profile.mode='';profile.roomState=''}
+    send(ws,{t:'socialWelcome',profile:{id:profile.id,code:profile.code,name:profile.name},profileToken:token});sendSocialState(profile);refreshSocialNeighborhood(profile);return
+  }
+  const profile=socialStore.profiles[ws.socialProfileId];if(!profile||socialSockets.get(profile.id)!==ws)return;
+  if(m.t==='socialRename'){
+    const n=safeName(m.name);if(profile.name!==n){profile.name=n;saveSocial();refreshSocialNeighborhood(profile)}return
+  }
+  if(m.t==='socialStatus'){updateProfileStatus(profile,m);return}
+  if(m.t==='socialAddFriend'){
+    const target=findProfileByCode(m.code);if(!target)return send(ws,{t:'socialActionResult',ok:false,message:'No MAYDAY profile has that Game UID.'});
+    if(target.id===profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'You cannot add yourself.'});
+    if((profile.friends||[]).includes(target.id))return send(ws,{t:'socialActionResult',ok:false,message:'Already friends.'});
+    if((profile.requestsIn||[]).includes(target.id)){profile.friends.push(target.id);target.friends.push(profile.id);profile.requestsIn=profile.requestsIn.filter(x=>x!==target.id);target.requestsOut=(target.requestsOut||[]).filter(x=>x!==profile.id);saveSocial();refreshSocialNeighborhood(profile);return send(ws,{t:'socialActionResult',ok:true,message:'Friend request accepted.'})}
+    if((profile.requestsOut||[]).includes(target.id))return send(ws,{t:'socialActionResult',ok:true,message:'Friend request already sent.'});
+    profile.requestsOut=profile.requestsOut||[];target.requestsIn=target.requestsIn||[];profile.requestsOut.push(target.id);target.requestsIn.push(profile.id);saveSocial();refreshSocialNeighborhood(profile);send(ws,{t:'socialActionResult',ok:true,message:`Friend request sent to ${target.name}.`});return
+  }
+  if(m.t==='socialFriendResponse'){
+    const other=socialStore.profiles[String(m.profileId||'')];if(!other||(profile.requestsIn||[]).indexOf(other.id)<0)return send(ws,{t:'socialActionResult',ok:false,message:'That friend request is no longer available.'});
+    profile.requestsIn=profile.requestsIn.filter(id=>id!==other.id);other.requestsOut=(other.requestsOut||[]).filter(id=>id!==profile.id);
+    if(m.accept){profile.friends=profile.friends||[];other.friends=other.friends||[];if(!profile.friends.includes(other.id))profile.friends.push(other.id);if(!other.friends.includes(profile.id))other.friends.push(profile.id)}
+    saveSocial();refreshSocialNeighborhood(profile);sendSocialState(other);send(ws,{t:'socialActionResult',ok:true,message:m.accept?`You and ${other.name} are now friends.`:'Friend request declined.'});return
+  }
+  if(m.t==='socialInviteFriend'){
+    const target=socialStore.profiles[String(m.friendId||'')],code=String(m.roomCode||'').toUpperCase(),r=rooms[code];
+    if(!target||!(profile.friends||[]).includes(target.id))return send(ws,{t:'socialActionResult',ok:false,message:'You can invite only accepted friends.'});
+    if(!r||r.state==='over'||!roomContainsProfile(r,profile.id))return send(ws,{t:'socialActionResult',ok:false,message:'You must be in an active room to invite friends.'});
+    const recipient=socialSockets.get(target.id);if(!recipient||recipient.readyState!==1)return send(ws,{t:'socialActionResult',ok:false,message:`${target.name} is offline.`});
+    if(roomContainsProfile(r,target.id))return send(ws,{t:'socialActionResult',ok:false,message:`${target.name} is already in this room.`});
+    const inviteId=crypto.randomBytes(12).toString('hex'),expiresAt=Date.now()+90000;
+    console.log(`[invite ${BUILD_VERSION}] created id=${inviteId.slice(0,8)} room=${code} from=${profile.code} to=${target.code}`);
+    pendingSocialInvites.set(inviteId,{inviteId,fromId:profile.id,toId:target.id,roomCode:code,expiresAt});
+    send(recipient,{t:'socialInvite',inviteId,from:{id:profile.id,code:profile.code,name:profile.name},room:{code,mode:r.mode,state:r.state,players:list(r).length}});
+    send(ws,{t:'socialActionResult',ok:true,message:`Invitation sent to ${target.name}.`});return
+  }
+  if(m.t==='socialDeclineInvite'){
+    const inv=pendingSocialInvites.get(String(m.inviteId||''));if(inv&&inv.toId===profile.id){pendingSocialInvites.delete(inv.inviteId);const sender=socialSockets.get(inv.fromId);if(sender)send(sender,{t:'socialInviteResult',message:`${profile.name} declined your room invitation.`})}return
+  }
+  if(m.t==='socialAcceptInvite'){
+    const inv=pendingSocialInvites.get(String(m.inviteId||''));
+    if(!inv||inv.toId!==profile.id||inv.expiresAt<Date.now()){
+      pendingSocialInvites.delete(String(m.inviteId||''));
+      return send(ws,{t:'socialActionResult',ok:false,message:'This invitation has expired.'});
+    }
+    const r=rooms[inv.roomCode];
+    if(!r||r.state==='over'){
+      pendingSocialInvites.delete(inv.inviteId);
+      return send(ws,{t:'socialActionResult',ok:false,message:'That room has ended.'});
+    }
+    // Keep the invite alive until the game socket confirms the recipient actually
+    // joined as a pilot or spectator. An acceptance alone is not a successful join.
+    inv.accepted=true;
+    inv.acceptedAt=Date.now();
+    console.log(`[invite ${BUILD_VERSION}] accepted id=${inv.inviteId.slice(0,8)} room=${r.code} profile=${profile.code}`);
+    inv.expiresAt=Date.now()+30000;
+    send(ws,{t:'socialJoinRoom',inviteId:inv.inviteId,roomCode:r.code,mode:r.mode,state:r.state});
+    const sender=socialSockets.get(inv.fromId);
+    if(sender)send(sender,{t:'socialInviteResult',status:'accepted',message:`${profile.name} accepted — joining room ${r.code}...`});
+    return;
+  }
+  if(m.t==='socialGameJoin'){
+    const inviteId=String(m.inviteId||''),inv=pendingSocialInvites.get(inviteId),code=String(m.roomCode||'').toUpperCase(),r=rooms[code];
+    if(!inv||inv.toId!==profile.id||!inv.accepted||inv.expiresAt<Date.now()){
+      send(ws,{t:'err',m:'This invitation has expired. Ask your friend to invite you again.',inviteId});return
+    }
+    if(!r||r.state==='over'){
+      send(ws,{t:'err',m:'That room has ended. Ask your friend to create or reopen a room.',inviteId});return
+    }
+    if(inv.roomCode!==code){send(ws,{t:'err',m:'The invitation room does not match. Please accept a fresh invitation.',inviteId});return}
+    try{
+      // Use the already-open social socket for the room handoff. This avoids a second
+      // WebSocket opening race that previously caused accepted invites to time out.
+      detachSocketFromRoom(ws);
+      if(r.state==='playing'||r.state==='between'){
+        ws.room=r.code;ws.spectator=true;ws.spectatorRoom=r.code;ws.profileId=profile.id;r.spectators.add(ws);
+        send(ws,{t:'welcome',id:null,code:r.code,mode:r.mode,spectator:true,inviteId});
+        send(ws,{t:'spectate',mode:r.mode,state:r.state,round:r.round,score:r.score,spectator:true});
+        send(ws,{t:'room',...info(r)});
+        send(ws,{t:'snap',players:snapshotOf(r),score:r.score,round:r.round,state:r.state});
+      }else{
+        const joinMsg={t:'join',roomId:r.code,code:r.code,n:profile.name,ty:m.ty,colorId:m.colorId,team:m.team,profileId:profile.id};
+        const id=addPlayer(ws,r,joinMsg);
+        send(ws,{t:'welcome',id,code:r.code,roomId:r.code,mode:r.mode,session:r.players[id].sessionToken,inviteId});
+        rcast(r,info(r));
+      }
+      console.log(`[invite ${BUILD_VERSION}] social-game-join id=${inviteId.slice(0,8)} room=${r.code} profile=${profile.code} socketReuse=true state=${r.state}`);
+      broadcastGames();
+    }catch(e){
+      console.warn(`[invite ${BUILD_VERSION}] social-game-join-failed id=${inviteId.slice(0,8)} room=${code} reason=${e?.message||'unknown'}`);
+      send(ws,{t:'err',m:e&&e.message==='ALL_COLORS_TAKEN'?'All 20 pilot colors are currently taken in this room.':'Could not join that room. Please ask for a new invitation.',inviteId});
+    }
+    return;
+  }
+  if(m.t==='socialLeaveGame'){
+    detachSocketFromRoom(ws);
+    const leavingProfile=socialStore.profiles[ws.socialProfileId];
+    if(leavingProfile){leavingProfile.status='lobby';leavingProfile.roomCode='';leavingProfile.mode='';leavingProfile.roomState='';refreshSocialNeighborhood(leavingProfile)}
+    send(ws,{t:'socialLeaveGameResult',ok:true});return
+  }
+  if(m.t==='socialJoinComplete'){
+    const inviteId=String(m.inviteId||''),inv=pendingSocialInvites.get(inviteId);
+    if(!inv||inv.toId!==profile.id||!inv.accepted)return;
+    const r=rooms[inv.roomCode],reportedCode=String(m.code||'').toUpperCase();
+    const profilePresent=!!r&&roomContainsProfile(r,profile.id);
+    const joined=m.ok===true&&reportedCode===inv.roomCode&&!!r&&profilePresent;
+    console.log(`[invite ${BUILD_VERSION}] join-complete id=${inviteId.slice(0,8)} room=${inv.roomCode} ok=${!!m.ok} reported=${reportedCode||'-'} profilePresent=${profilePresent} result=${joined?'joined':'failed'}`);
+    pendingSocialInvites.delete(inviteId);
+    const sender=socialSockets.get(inv.fromId);
+    if(joined){
+      const mode=m.spectator?' as a spectator':' as a pilot';
+      if(sender)send(sender,{t:'socialInviteResult',status:'joined',message:`${profile.name} joined room ${r.code}${mode}.`});
+      send(ws,{t:'socialActionResult',ok:true,message:`Joined room ${r.code}.`});
+    }else{
+      const why=String(m.message||'The room connection did not complete. Try the invitation again.').slice(0,180);
+      if(sender)send(sender,{t:'socialInviteResult',status:'failed',message:`${profile.name} accepted, but could not join room ${inv.roomCode}: ${why}`});
+      send(ws,{t:'socialActionResult',ok:false,message:`Could not join room ${inv.roomCode}: ${why}`});
+    }
+    return;
+  }
+}
+const send=(ws,o)=>ws&&ws.readyState===1&&ws.send(JSON.stringify(o));
+const list=r=>Object.values(r.players);
+const rcast=(r,o,except)=>{for(const p of list(r))if(p.ws!==except)send(p.ws,o);for(const sws of (r.spectators||[]))if(sws!==except)send(sws,o)};
+const snapshotOf=r=>{const players={};for(const k in r.players)players[k]=pub(r,r.players[k]);return players};
+const isFFA=r=>r.mode==='ffa'||r.mode==='survivor';
+const colOf=(r,p)=>isFFA(r)?p.color:(TEAM_BY_ID[p.team]?.color||'#fff');
+const mvpScore=p=>(p.kills||0)*120+(p.damage||0)+(p.survivalBonus||0);
+const pickMVP=ps=>ps.slice().sort((a,b)=>mvpScore(b)-mvpScore(a)||(b.kills||0)-(a.kills||0)||(b.damage||0)-(a.damage||0))[0]||null;
+const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
+const pub=(r,p)=>({n:p.n,team:p.team,colorId:p.colorId,c:colOf(r,p),ty:p.ty,mh:p.mh,hp:p.hp,alive:p.connected!==false&&p.alive,sc:p.sc||0,lives:p.livesRemaining,online:p.connected!==false,pr:Math.max(0,p.prot-Date.now()),rh:r.mode==='clash'?Math.max(0,(r.roundHiddenUntil||0)-Date.now()):0,sh:r.mode==='clash'?(p.shields===undefined?3:p.shields):0,su:r.mode==='clash'?Math.max(0,(p.shieldUntil||0)-Date.now()):0,p:p.p,q:p.q});
+const mkCode=()=>{let c;do{c=Math.random().toString(36).replace(/[^a-z]/g,'').slice(0,4).toUpperCase()}while(c.length<4||rooms[c]);return c};
+function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);if(identity){ws.profileId=identity.id;if(identity.name!==safeName(m.n)){identity.name=safeName(m.n);saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
+  const cnt=t=>list(r).filter(p=>p.team===t).length;
+  let team;
+  if(isFFA(r)) team='p'+id;
+  else {
+    const valid=teamIds(r);
+    team=valid.includes(m.team)?m.team:valid.slice().sort((a,b)=>cnt(a)-cnt(b))[0];
+  }
+  let colorId=COLOR_BY_ID[m.colorId]?m.colorId:null;
+  if(isFFA(r)){
+    const taken=new Set(list(r).map(p=>p.colorId).filter(Boolean));
+    if(!colorId||taken.has(colorId)){colorId=COLOR_DEFS.find(c=>!taken.has(c.id))?.id||null;}
+    if(!colorId)throw new Error('ALL_COLORS_TAKEN');
+  }
+  const color=colorId?(COLOR_BY_ID[colorId].color):'#ffffff';
+  r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:String(m.n||'Pilot').slice(0,14),team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
+  return id}
+const spawn=p=>{p.inRound=true;p.alive=true;p.hp=p.mh;p.prot=Date.now()+PROT;p.lastSpawn=Date.now();p.shields=p.shields===undefined?3:3;p.shieldUntil=0;p.flares=3;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;p.eliminated=false};
+function startRound(r){clearTimeout(r.timer);r.round++;r.state='playing';r.roundHiddenUntil=r.mode==='clash'?Date.now()+CLASH_STEALTH:0;list(r).forEach(p=>{if(r.mode==='survivor')p.livesRemaining=r.lives||1;
+  // A disconnected Clash pilot is eliminated for this round. Do not respawn an
+  // offline pilot as alive/invulnerable; they can rejoin in the next round.
+  if(r.mode==='clash'&&p.connected===false){p.alive=false;p.inRound=false;p.hp=0;return}
+  spawn(p)});
+  rcast(r,{t:'round',n:r.round,score:r.score,mode:r.mode,lives:r.lives||1,hidden:r.mode==='clash'?CLASH_STEALTH:0,spectatorReady:true})}
+function endRound(r,win){if(r.state!=='playing')return;r.state='between';if(win)r.score[win]=(r.score[win]||0)+1;
+  rcast(r,{t:'roundend',win,score:r.score,round:r.round,teams:activeTeams(r)});broadcastGames();
+  r.timer=setTimeout(()=>{if(!rooms[r.code])return;
+    if(win&&r.score[win]>=WIN_ROUNDS){r.state='over';const players=list(r).map(p=>({n:p.n,c:colOf(r,p),team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,shields:p.shieldUses||0,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.team===win&&p.alive?20:0}));const teams=activeTeams(r).map(t=>({id:t.id,name:t.name,color:t.color,score:r.score[t.id]||0,kills:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.kills||0),0),damage:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.damage||0),0)})).sort((a,b)=>b.score-a.score||b.kills-a.kills||b.damage-a.damage);const mvp=pickMVP(players.filter(p=>p.team===win).length?players.filter(p=>p.team===win):players);rcast(r,{t:'matchend',mode:'clash',win,score:r.score,teams,mvp,players})}
+    else if(list(r).length)startRound(r)},BREAK)}
+function checkRound(r){if(r.mode!=='clash'||r.state!=='playing')return;
+  // Only connected pilots with positive HP count as survivors. Unexpected
+  // disconnects must not leave an invulnerable, stale pilot blocking a team win.
+  const remaining=teamIds(r).filter(t=>list(r).some(p=>p.connected!==false&&p.alive&&p.hp>0&&p.team===t));
+  if(remaining.length>1)return;
+  endRound(r,remaining.length===1?remaining[0]:null)}
+function kill(r,vid,sid){const v=r.players[vid],s=r.players[sid];if(!v)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:vid})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;if(s&&s!==v)s.kills=(s.kills||0)+1;
+  rcast(r,{t:'kill',victim:vid,by:s?sid:null,vn:v.n,bn:s?s.n:null,x:v.p});send(v.ws,{t:'dead',by:s?s.n:null});checkRound(r)}
+function ffaRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive)return;spawn(v);send(v.ws,{t:'respawn',by,crash})},RESPAWN_DELAY)}
+function ffaKill(r,v,vid,s,sid){s.sc++;s.kills=(s.kills||0)+1;v.deaths=(v.deaths||0)+1;v.alive=false;v.hp=0;v.shieldUntil=0;rcast(r,{t:'kill',victim:vid,by:sid,vn:v.n,bn:s.n,x:v.p});
+  if(s.sc>=WIN_KILLS){r.state='over';clearTimeout(v.respawnTimer);const players=list(r).map(p=>({n:p.n,c:p.color,team:p.team,sc:p.sc,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,survivalBonus:p.alive?20:0})).sort((a,b)=>b.sc-a.sc);rcast(r,{t:'matchend',mode:'ffa',win:s.n,wc:s.color,mvp:pickMVP(players),players})}
+  else ffaRespawnLater(r,v,s.n,false)}
+function ffaCrash(r,v){if(r.state!=='playing'||!v.alive)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:v.id})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;rcast(r,{t:'kill',victim:v.id,by:null,vn:v.n,bn:null,x:v.p});send(v.ws,{t:'dead',by:null,crash:true});ffaRespawnLater(r,v,null,true)}
+function survivorRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive||v.livesRemaining<=0)return;spawn(v);send(v.ws,{t:'respawn',by,crash,lives:v.livesRemaining,mode:'survivor'});checkSurvivor(r)},RESPAWN_DELAY)}
+function survivorEnd(r,w){if(r.state!=='playing')return;r.state='over';clearTimeout(r.timer);const winner=w;const players=list(r).map(p=>({n:p.n,c:p.color,team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,lives:p.livesRemaining||0,alive:p.alive,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.alive?80:0}));rcast(r,{t:'matchend',mode:'survivor',win:winner?winner.n:null,wc:winner?winner.color:null,lives:r.lives,mvp:pickMVP(players),players})}
+function checkSurvivor(r){if(r.mode!=='survivor'||r.state!=='playing')return;const eligible=list(r).filter(p=>p.livesRemaining>0);if(eligible.length!==1)return;const w=eligible[0];if(w.alive)survivorEnd(r,w)}
+function survivorKill(r,v,s,vid,sid,crash=false){if(!v||!v.alive)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:v.id})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;if(s&&s!==v)s.kills=(s.kills||0)+1;v.livesRemaining=Math.max(0,(v.livesRemaining||1)-1);rcast(r,{t:'kill',victim:vid,by:sid??null,vn:v.n,bn:s?s.n:null,x:v.p,lives:v.livesRemaining});if(v.livesRemaining>0){send(v.ws,{t:'dead',by:s?s.n:null,crash,lives:v.livesRemaining});survivorRespawnLater(r,v,s?s.n:null,crash)}else{v.eliminated=true;send(v.ws,{t:'dead',by:s?s.n:null,crash,lives:0,eliminated:true});checkSurvivor(r)}}
+function damage(r,vid,sid,amt){const v=r.players[vid],s=r.players[sid],now=Date.now();
+  if(r.state!=='playing'||!v||!s||!v.connected||!s.connected||!v.alive||vid===sid||v.team===s.team)return;if(now<v.prot)return;if(r.mode==='clash'&&now<(r.roundHiddenUntil||0))return;if(r.mode==='clash'&&v.shieldUntil>now)return;v.shieldUntil=0;
+  const dealt=Math.min(Math.max(v.hp,0),amt);v.hp-=amt;s.damage=(s.damage||0)+dealt;if(v.hp<=0){if(r.mode==='ffa')ffaKill(r,v,vid,s,sid);else if(r.mode==='survivor')survivorKill(r,v,s,vid,sid,false);else kill(r,vid,sid)}}
+function broadcastGames(){
+  const games=Object.values(rooms).filter(r=>r.state!=='over'&&Object.keys(r.players).length>0).map(r=>({roomId:r.code,mode:r.mode,state:r.state,players:list(r).length,teams:r.teamCount||2,lives:r.lives||1,host:r.players[r.host]?.n||'Host'}));
+  const msg={t:'games',games};
+  // Social sockets only need presence/friend messages; avoid pushing the game roster 20 times/sec to them.
+  for(const client of wss.clients)if(!client.socialProfileId)send(client,msg);
+}
+wss.on('connection',ws=>{
+  ws.isAlive=true;
+  ws.on('pong',()=>{ws.isAlive=true});
+  ws.on('error',e=>console.warn('MAYDAY WebSocket error:',e?.message||e));
+  ws.on('message',raw=>{let m;try{m=JSON.parse(raw)}catch{return}
+    if(typeof m.t==='string'&&m.t.startsWith('social')){handleSocialMessage(ws,m);return}
+    if(m.t==='leave'){detachSocketFromRoom(ws);const leaver=socialStore.profiles[ws.profileId];if(leaver){leaver.status='lobby';leaver.roomCode='';leaver.mode='';leaver.roomState='';refreshSocialNeighborhood(leaver)}send(ws,{t:'left',ok:true});return}
+    let r=rooms[ws.room];
+    if(m.t==='host'&&!r){
+      r={code:mkCode(),mode:['ffa','clash','survivor'].includes(m.mode)?m.mode:'ffa',teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null};
+      
+      if(r.mode==='clash') for(const t of activeTeams(r)) r.score[t.id]=0;rooms[r.code]=r;
+      let id;try{id=addPlayer(ws,r,m)}catch(e){delete rooms[r.code];return send(ws,{t:'err',m:'Could not create the room.'})}
+      r.host=id;send(ws,{t:'welcome',id,code:r.code,roomId:r.code,mode:r.mode,session:r.players[id].sessionToken});rcast(r,info(r));broadcastGames();return}
+    if(m.t==='join'&&!r){const requestedCode=String(m.roomId||m.code||'').toUpperCase().trim();
+      if(m.inviteId)console.log(`[invite ${BUILD_VERSION}] game-join-request id=${String(m.inviteId).slice(0,8)} room=${requestedCode} profileAuthenticated=${!!authProfile(m.profileId,m.profileToken)}`);
+      const rr=rooms[requestedCode];
+      if(!rr){if(m.inviteId)console.warn(`[invite ${BUILD_VERSION}] join-rejected id=${String(m.inviteId).slice(0,8)} reason=no-room room=${requestedCode}`);return send(ws,{t:'err',m:'No active room with that Room ID.',inviteId:m.inviteId||null})}
+      if(rr.state==='playing'||rr.state==='between'){
+        ws.room=rr.code;ws.spectator=true;ws.spectatorRoom=rr.code;const spectatorIdentity=authProfile(m.profileId,m.profileToken);if(spectatorIdentity)ws.profileId=spectatorIdentity.id;rr.spectators.add(ws);
+        send(ws,{t:'welcome',id:null,code:rr.code,mode:rr.mode,spectator:true,inviteId:m.inviteId||null});
+        send(ws,{t:'spectate',mode:rr.mode,state:rr.state,round:rr.round,score:rr.score,spectator:true});
+        send(ws,{t:'room',...info(rr)});
+        send(ws,{t:'snap',players:snapshotOf(rr),score:rr.score,round:rr.round,state:rr.state});
+        broadcastGames();
+        return;
+      }
+      let id;try{id=addPlayer(ws,rr,m)}catch(e){if(e&&e.message==='ALL_COLORS_TAKEN')return send(ws,{t:'err',m:'All 20 pilot colors are currently taken in this room.'});return send(ws,{t:'err',m:'Could not join the room.'})}send(ws,{t:'welcome',id,code:rr.code,roomId:rr.code,mode:rr.mode,session:rr.players[id].sessionToken,inviteId:m.inviteId||null});
+      rcast(rr,info(rr));broadcastGames();return}
+    if((m.t==='reconnect'||m.t==='resume')&&!r){const rr=rooms[String(m.code||'').toUpperCase().trim()];
+      const token=String(m.session||'');
+      const candidate=rr&&Object.values(rr.players).find(p=>p.sessionToken===token);
+      if(!rr||!candidate)return send(ws,{t:'err',m:'That MAYDAY match is no longer available for reconnect.'});
+      if(candidate.connected&&candidate.ws&&candidate.ws!==ws)return send(ws,{t:'err',m:'That MAYDAY session is already connected.'});
+      clearTimeout(candidate.reconnectTimer);candidate.reconnectTimer=null;candidate.ws=ws;candidate.connected=true;candidate.disconnectedAt=0;ws.id=candidate.id;ws.room=rr.code;ws.sessionToken=candidate.sessionToken;ws.profileId=candidate.profileId||null;
+      send(ws,{t:'welcome',id:candidate.id,code:rr.code,roomId:rr.code,mode:rr.mode,session:candidate.sessionToken,resumed:true});
+      send(ws,{t:'resume',mode:rr.mode,state:rr.state,round:rr.round,score:rr.score,lives:rr.lives||1,alive:candidate.alive,eliminated:candidate.eliminated});
+      rcast(rr,info(rr));return}
+    if(!r)return;const id=ws.id,me=r.players[id];if(ws.spectator)return; if(!me||me.ws!==ws)return;
+    if(m.t==='type'&&r.state==='lobby'){
+      const ty=HP[m.ty]?m.ty:null;
+      if(!ty)return send(ws,{t:'err',m:'Unknown aircraft type.'});
+      me.ty=ty;me.mh=HP[ty];me.hp=HP[ty];
+      rcast(r,info(r));
+    }
+    else     if(m.t==='setlives'&&id===r.host&&r.mode==='survivor'&&r.state==='lobby'){r.lives=Math.min(5,Math.max(1,Number(m.lives)||1));for(const p of list(r))p.livesRemaining=r.lives;rcast(r,info(r))}
+    else if(m.t==='color'&&isFFA(r)&&(r.state==='lobby'||r.state==='between')){const c=COLOR_BY_ID[m.colorId];if(!c)return send(ws,{t:'err',m:'Unknown color.'});const taken=list(r).some(p=>p.id!==id&&p.colorId===c.id);if(taken)return send(ws,{t:'err',m:'That color is already taken.'});me.colorId=c.id;me.color=c.color;rcast(r,info(r))}
+    else if(m.t==='setteams'&&id===r.host&&r.mode==='clash'&&(r.state==='lobby'||r.state==='between')){
+      const next=Math.min(6,Math.max(2,Number(m.teamCount)||2));
+      if(next!==r.teamCount){
+        r.teamCount=next;
+        const valid=teamIds(r);
+        for(const p of list(r)){
+          if(!valid.includes(p.team)){
+            const counts=Object.fromEntries(valid.map(t=>[t,list(r).filter(x=>x.team===t).length]));
+            p.team=valid.slice().sort((a,b)=>counts[a]-counts[b])[0];
+          }
+        }
+        const nextScore={};for(const t of valid)nextScore[t]=r.score[t]||0;r.score=nextScore;
+      }
+      rcast(r,info(r))
+    }
+    else if(m.t==='team'&&r.mode==='clash'&&teamIds(r).includes(m.team)&&(r.state==='lobby'||r.state==='between')){me.team=m.team;rcast(r,info(r));broadcastGames()}
+    else if(m.t==='start'&&id===r.host&&r.state==='lobby'){
+      if(list(r).length<2)return send(ws,{t:'err',m:'At least 2 pilots are required to start this mode.'});
+      if(r.mode==='clash'){const n=t=>list(r).filter(p=>p.team===t).length;const missing=teamIds(r).filter(t=>n(t)<1);
+        if(missing.length)return send(ws,{t:'err',m:`Each team needs at least one player. Missing: ${missing.map(t=>TEAMNAME[t]).join(', ')}`});
+        r.score={};for(const t of teamIds(r))r.score[t]=0;r.round=0;startRound(r);broadcastGames()}
+      else if(r.mode==='survivor'){r.score={};r.round=0;for(const p of list(r)){p.sc=0;p.kills=0;p.deaths=0;p.damage=0;p.shieldUses=0;p.livesRemaining=r.lives||1;p.eliminated=false}startRound(r);broadcastGames()}
+      else{list(r).forEach(p=>{p.sc=0;p.kills=0;p.deaths=0;p.damage=0;p.shieldUses=0});r.score={};r.round=0;startRound(r);broadcastGames()}}
+    else if(m.t==='again'&&id===r.host&&r.state==='over'){r.state='lobby';r.score={};if(r.mode==='clash')for(const t of teamIds(r))r.score[t]=0;if(r.mode==='survivor')for(const p of list(r))p.livesRemaining=r.lives||1;r.round=0;for(const p of list(r)){p.alive=false;p.inRound=false;p.sc=0;p.kills=0;p.deaths=0;p.damage=0;p.shieldUses=0;p.eliminated=false}rcast(r,info(r))}
+    else if(m.t==='s'){if(me.alive){me.p=m.p;me.q=m.q}}
+    else if(m.t==='quickalert'){
+      const now=Date.now();
+      if(r.mode!=='clash'||r.state!=='playing')return send(ws,{t:'quickalertsent',ok:false,message:'MAYDAY alert is available during a live Clash Squad round.'});
+      const wait=5000-(now-(me.lastQuickAlertAt||0));
+      if(wait>0)return send(ws,{t:'quickalertsent',ok:false,message:`Wait ${Math.ceil(wait/1000)}s before sending another alert.`});
+      me.lastQuickAlertAt=now;
+      // Broadcast the discreet MAYDAY signal room-wide: all teams and spectators.
+      // The notification intentionally contains no sender name or team information.
+      rcast(r,{t:'quickalert'});
+      send(ws,{t:'quickalertsent',ok:true});
+    }
+    else if(m.t==='shoot'){if(me.connected&&me.alive&&r.state==='playing'&&!(r.mode==='clash'&&Date.now()<(r.roundHiddenUntil||0))){me.shots=(me.shots||0)+1;rcast(r,{t:'shot',p:m.p,d:m.d,by:id,tid:m.tid||null},ws)}}
+    else if(m.t==='mfire'){const t=r.players[Number(m.tid)];const now=Date.now();const dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;const sameTeam=t&&t.team===me.team;const valid=t&&t.connected&&t.alive&&!sameTeam&&dist<=MISSILE_RANGE&&me.lockTarget===t.id&&now-me.lockSince>=3000;if(me.connected&&me.alive&&r.state==='playing'&&valid&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.missiles=(me.missiles||0)+1;rcast(r,{t:'mfire',p:m.p,d:m.d,tid:m.tid,by:id},ws);me.lockTarget=null;me.lockSince=0;me.lockLastAt=0}else if(me.connected)send(ws,{t:'err',m:'Missile launch rejected: target is out of lock range or lock is not stable.'})}
+    else if(m.t==='shield'){if(me.connected&&r.mode==='clash'&&r.state==='playing'&&me.alive&&me.shields>0&&Date.now()>me.shieldUntil){me.shields--;me.shieldUses=(me.shieldUses||0)+1;me.shieldUntil=Date.now()+7000;rcast(r,{t:'shield',id, n:me.shields,until:me.shieldUntil},null)}}
+    else if(m.t==='flare'){if(me.connected&&me.alive&&r.state==='playing'&&(me.flares||0)>0){me.flares--;rcast(r,{t:'flare',id,p:m.p},ws)}}
+    else if(m.t==='hit'){if(me.connected)damage(r,m.id,id,25)}
+    else if(m.t==='mhit'){if(me.connected)damage(r,id,m.by,50)}
+    else if(m.t==='crash'){if(me.connected&&me.alive&&r.state==='playing'&&Date.now()>me.prot+1000){if(r.mode==='ffa')ffaCrash(r,me);else if(r.mode==='survivor')survivorKill(r,me,null,id,null,true);else kill(r,id,null)}}
+    else if(m.t==='lock'){
+      const now=Date.now();
+      const clearCurrentLock=()=>{
+        if(me.lockTarget!==null&&me.lockTarget!==undefined){const oldTarget=r.players[me.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:id})}
+        me.lockTarget=null;me.lockSince=0;me.lockLastAt=0;
+      };
+      if(m.id===null||m.id===undefined||!Number.isFinite(Number(m.id))){clearCurrentLock();return}
+      const t=r.players[Number(m.id)],dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;
+      const valid=me.connected&&me.alive&&t&&t.connected&&t.alive&&t.id!==id&&t.team!==me.team&&dist<=LOCK_RANGE&&r.state==='playing'&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0));
+      if(!valid){clearCurrentLock();return}
+      // If the client stopped sending lock heartbeats, the lock was broken even if it later reacquires the same target.
+      if(me.lockTarget!==t.id||!me.lockLastAt||now-me.lockLastAt>LOCK_HEARTBEAT_TIMEOUT){
+        if(me.lockTarget!==null&&me.lockTarget!==undefined){const oldTarget=r.players[me.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:id})}
+        me.lockSince=now;
+      }
+      me.lockTarget=t.id;me.lockLastAt=now;
+      if(now-me.lockSince>=LOCK_DURATION)send(t.ws,{t:'locked',by:id,n:me.n,c:colOf(r,me)});
+    }
+  });
+  ws.on('close',(code,reason)=>{if(ws.socialProfileId&&socialSockets.get(ws.socialProfileId)===ws){socialSockets.delete(ws.socialProfileId);const sp=socialStore.profiles[ws.socialProfileId];if(sp){sp.status='offline';sp.roomCode='';sp.mode='';sp.roomState='';refreshSocialNeighborhood(sp)}}const r=rooms[ws.room];if(!r)return;if(ws.spectator){r.spectators?.delete(ws);return;}const p=r.players[ws.id];if(!p||p.ws!==ws)return;
+    const explicitLeave=code===1000&&String(reason||'')==='left room';
+    if(explicitLeave){
+      delete r.players[ws.id];clearTimeout(p.reconnectTimer);
+      if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];return}
+      if(r.host===ws.id)r.host=+Object.keys(r.players)[0];
+      rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();return;
+    }
+    // Unexpected disconnect: keep the player's full session for 10 minutes so a tab close, refresh,
+    // browser crash, or accidental navigation does not permanently remove them from the room.
+    p.ws=null;p.connected=false;p.disconnectedAt=Date.now();clearTimeout(p.reconnectTimer);
+    // In Clash Squad, an offline aircraft cannot be hit by server-authoritative
+    // damage, so eliminate it from this round immediately and re-check the winner.
+    if(r.mode==='clash'&&r.state==='playing'){p.alive=false;p.inRound=false;p.hp=0;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;checkRound(r)}
+    p.reconnectTimer=setTimeout(()=>{const cur=rooms[r.code]?.players[p.id];if(!cur||cur.connected)return;delete r.players[p.id];
+      if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];broadcastGames();return}
+      if(r.host===p.id)r.host=+Object.keys(r.players)[0];rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();
+    },RECONNECT_GRACE);
+    rcast(r,info(r));broadcastGames();});
+});
+// Keep game snapshots frequent, but send the lightweight room-list refresh once per second.
+const snapshotTimer=setInterval(()=>{for(const r of Object.values(rooms)){if(r.state==='playing'&&r.mode==='clash')checkRound(r);if(r.state!=='playing'&&r.state!=='between')continue;
+  const players={};for(const k in r.players)players[k]=pub(r,r.players[k]);rcast(r,{t:'snap',players,score:r.score,round:r.round,state:r.state})}},50);
+const roomListTimer=setInterval(broadcastGames,1000);
+// Render and other internet hosts may close idle connections; ping clients so dead sockets are detected.
+const heartbeatTimer=setInterval(()=>{for(const client of wss.clients){if(client.isAlive===false){client.terminate();continue}client.isAlive=false;try{client.ping()}catch{client.terminate()}}},25000);
+heartbeatTimer.unref?.();roomListTimer.unref?.();snapshotTimer.unref?.();
+let shuttingDown=false;
+function shutdown(signal){if(shuttingDown)return;shuttingDown=true;console.log(`MAYDAY ${signal}: shutting down gracefully`);clearInterval(heartbeatTimer);clearInterval(roomListTimer);clearInterval(snapshotTimer);for(const client of wss.clients){try{send(client,{t:'serverRestarting',message:'MAYDAY server is restarting. Active rooms will end; reconnect after it is back.'});client.close(1012,'service restart')}catch{try{client.terminate()}catch{}}}const force=setTimeout(()=>{for(const client of wss.clients)try{client.terminate()}catch{}process.exit(0)},8000);force.unref?.();server.close(()=>{clearTimeout(force);process.exit(0)})}
+process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
+server.listen(PORT,'0.0.0.0',()=>{
+  console.log(`\nMAYDAY ${BUILD_VERSION} (Dogfight + Clash Squad + Survivor) running!\n  You:      http://localhost:${PORT}\n  Health:   http://localhost:${PORT}/healthz\n  Version:  http://localhost:${PORT}/api/version\n  Data dir: ${SOCIAL_DIR}`);
+  if(!process.env.MAYDAY_DATA_DIR)console.log('  Storage: local ./data directory (configure MAYDAY_DATA_DIR for a persistent cloud volume)');
+  for(const l of Object.values(os.networkInterfaces()))for(const i of l)if(i.family==='IPv4'&&!i.internal)console.log(`  Friend:   http://${i.address}:${PORT}  (same Wi-Fi/network)`);
+});

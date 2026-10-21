@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Mayday</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+html,body{margin:0;height:100%;background:#0b1730;overflow:hidden;font-family:system-ui,sans-serif}
+canvas{display:block;width:100%;height:100%}
+#hud{z-index:4;position:fixed;left:18px;bottom:18px;min-width:190px;padding:10px 14px;color:#fff;font:600 14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 1px 3px #000;pointer-events:none;background:linear-gradient(180deg,rgba(8,18,35,.16),rgba(8,18,35,.62));border-left:2px solid rgba(130,220,255,.75);border-radius:0 9px 9px 0;backdrop-filter:blur(3px)}
+#landingHint{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:4;display:none;min-width:300px;max-width:86vw;padding:9px 14px;border:1px solid rgba(80,255,150,.42);border-radius:11px;background:rgba(4,18,12,.72);color:#d9ffe8;font:800 13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center;text-shadow:0 1px 4px #000;box-shadow:0 8px 24px rgba(0,0,0,.2);pointer-events:none;backdrop-filter:blur(5px)}
+#score{z-index:4;position:fixed;right:18px;top:18px;min-width:205px;padding:10px 14px;color:#fff;font:600 13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 1px 3px #000;pointer-events:none;text-align:right;background:linear-gradient(180deg,rgba(8,18,35,.5),rgba(8,18,35,.22));border-right:2px solid rgba(255,255,255,.45);border-radius:9px 0 0 9px;backdrop-filter:blur(3px)}
+#radar{z-index:4;position:fixed;right:18px;bottom:18px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle at center,rgba(20,60,35,.55),rgba(4,18,20,.84));border:2px solid rgba(140,255,190,.55);box-shadow:0 0 20px rgba(80,255,170,.12),inset 0 0 22px rgba(100,255,180,.08);pointer-events:none}
+#set{position:fixed;left:16px;top:16px;z-index:5;background:rgba(8,17,31,.72);color:#fff;font:600 12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px 12px;border:1px solid rgba(255,255,255,.1);border-radius:10px;line-height:1.9;backdrop-filter:blur(5px);box-shadow:0 8px 30px rgba(0,0,0,.18)}#set input{vertical-align:middle;width:110px;accent-color:#7cd7ff}
+#lock{position:fixed;display:none;transform:translate(-50%,-50%);width:70px;height:70px;border:3px solid currentColor;box-sizing:border-box;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px currentColor)}
+#lock::after{content:attr(data-t);position:absolute;top:70px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 1px 2px #000;background:rgba(0,0,0,.25);padding:2px 5px;border-radius:4px}
+#warn{position:fixed;left:50%;top:42px;transform:translateX(-50%);color:#ff5a5a;font:800 12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-shadow:0 1px 3px #000;pointer-events:none}
+#win{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at center,rgba(22,44,75,.68),rgba(4,10,22,.95));color:#fff;font:600 20px ui-monospace,SFMono-Regular,Menlo,monospace;z-index:9;text-align:center;backdrop-filter:blur(4px)}#win h1{font-size:3rem;margin:0 0 16px;text-shadow:0 4px 18px rgba(0,0,0,.45)}
+#win.resultsScreen{align-items:stretch;justify-content:flex-start;overflow:auto;padding:28px 16px;box-sizing:border-box}
+.resultsWrap{width:min(1120px,96vw);margin:auto;display:flex;flex-direction:column;gap:14px}
+.mvpStage{position:relative;min-height:180px;border:1px solid rgba(255,255,255,.14);border-radius:22px;background:radial-gradient(circle at 52% 40%,rgba(255,255,255,.11),rgba(8,17,31,.64) 55%,rgba(2,7,15,.9));overflow:hidden;box-shadow:0 22px 70px rgba(0,0,0,.42)}
+.mvpTitle{position:absolute;left:22px;top:18px;font:900 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.17em;opacity:.66}.mvpBadge{position:absolute;right:20px;top:16px;padding:7px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.16);font:900 10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em}
+.mvpPlane{position:absolute;left:-120px;top:78px;width:96px;height:22px;color:#ffd166;animation:mvpPlaneEnter 1.25s cubic-bezier(.17,.72,.25,1) forwards;filter:drop-shadow(0 0 12px currentColor)}.mvpPlane:before{content:'';position:absolute;left:14px;top:8px;width:72px;height:8px;border-radius:8px;background:currentColor}.mvpPlane:after{content:'';position:absolute;left:34px;top:-8px;width:30px;height:28px;background:currentColor;clip-path:polygon(50% 0,100% 100%,64% 76%,50% 100%,36% 76%,0 100%)}
+@keyframes mvpPlaneEnter{0%{left:-130px;opacity:0;transform:translateY(22px) rotate(-10deg) scale(.72)}55%{opacity:1}100%{left:calc(50% - 48px);top:62px;transform:translateY(0) rotate(-3deg) scale(1.08)}}
+.mvpName{position:absolute;left:50%;top:104px;transform:translateX(-50%);font:1000 clamp(1.9rem,4vw,3.15rem)/1 system-ui,sans-serif;letter-spacing:.05em;text-shadow:0 4px 20px #000;opacity:0;animation:mvpNameEnter .7s .82s both}@keyframes mvpNameEnter{from{opacity:0;transform:translate(-50%,10px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+.resultsCard{border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(8,16,29,.76);padding:15px;box-shadow:0 12px 40px rgba(0,0,0,.24)}.resultsHeadline{text-align:center;font:1000 clamp(1.55rem,4vw,2.5rem)/1.15 system-ui,sans-serif}.resultsSub{text-align:center;margin-top:5px;opacity:.66;font-size:.84rem}.resultsGrid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(380px,1.45fr);gap:14px}.resultsCard h2{margin:0 0 10px;font:1000 1.03rem system-ui,sans-serif;letter-spacing:.07em}.rankRow,.playerRow{display:grid;align-items:center;gap:8px;padding:8px 6px;border-top:1px solid rgba(255,255,255,.07);font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace}.rankRow{grid-template-columns:30px 1fr 60px 54px}.playerRow{grid-template-columns:28px 1.15fr 38px 38px 58px 42px 42px 42px}.rankRow:first-of-type,.playerRow:first-of-type{border-top:0}.rankNo{font-size:1.1rem;opacity:.7}.pilotName{font-weight:1000}.statHead{opacity:.5;font-size:9px;letter-spacing:.08em}.resultActions{text-align:center;padding:2px 0 4px}@media(max-width:820px){.resultsGrid{grid-template-columns:1fr}.playerRow{grid-template-columns:25px 1fr repeat(6,34px);font-size:10px}}
+
+#banner{position:fixed;top:27%;left:0;right:0;text-align:center;color:#fff;font:800 38px/1.2 system-ui,sans-serif;letter-spacing:.03em;text-shadow:0 3px 12px #000,0 0 24px rgba(130,220,255,.16);pointer-events:none}
+#room h3{margin:6px 0}
+#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);color:#fff;font:800 17px system-ui,sans-serif;text-shadow:0 2px 7px #000;pointer-events:none;background:rgba(4,12,22,.36);border:1px solid rgba(255,255,255,.1);padding:6px 12px;border-radius:999px;backdrop-filter:blur(4px)}
+#cross{position:fixed;left:50%;top:50%;width:18px;height:18px;margin:-9px;border:1px solid rgba(255,255,255,.78);border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.15),0 0 8px rgba(255,255,255,.16);pointer-events:none}
+#killReplayBtn{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:15;display:none;margin:0;padding:12px 22px;border:1px solid rgba(255,225,125,.72);border-radius:12px;background:linear-gradient(180deg,rgba(30,43,61,.96),rgba(7,15,29,.96));box-shadow:0 8px 26px rgba(0,0,0,.5),0 0 20px rgba(255,210,90,.16);color:#ffe18b;font:1000 14px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em;text-shadow:0 2px 5px #000;white-space:nowrap}
+#killReplayBtn:hover{transform:translate(-50%,-1px);background:linear-gradient(180deg,rgba(60,77,96,.98),rgba(13,24,42,.98));filter:brightness(1.12)}
+#killConfirm{position:fixed;left:50%;top:36%;transform:translate(-50%,-50%) scale(.75);z-index:8;display:none;min-width:190px;padding:9px 18px 11px;border:2px solid rgba(255,220,110,.9);border-radius:14px;background:linear-gradient(180deg,rgba(24,18,4,.88),rgba(6,10,18,.7));box-shadow:0 0 22px rgba(255,198,52,.26),inset 0 0 16px rgba(255,255,255,.05);color:#ffd45a;text-align:center;font:1000 22px/1.1 system-ui,sans-serif;letter-spacing:.12em;text-shadow:0 3px 10px #000;pointer-events:none;opacity:0}
+#killConfirm.show{display:block;animation:killPop .78s cubic-bezier(.15,.78,.28,1) forwards}
+#killConfirm .killIcon{display:block;font-size:42px;line-height:1;margin-bottom:2px;letter-spacing:0}
+#killConfirm .killWord{font-size:24px}
+#killConfirm .killTarget{display:block;margin-top:4px;color:#fff;font:800 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;opacity:.8}
+@keyframes killPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.68)}22%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}42%{transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.02) translateY(-12px)}}
+#cross:before,#cross:after{content:'';position:absolute;background:rgba(255,255,255,.7);left:50%;top:50%;transform:translate(-50%,-50%)}#cross:before{width:30px;height:1px}#cross:after{width:1px;height:30px}
+#vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 44%,transparent 54%,rgba(0,7,18,.08) 100%)}
+#lobby{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(45,91,135,.48),rgba(5,14,28,.9) 68%),linear-gradient(180deg,rgba(7,18,34,.35),rgba(3,7,15,.86));color:#fff;text-align:center;padding:20px;backdrop-filter:blur(2px)}
+#lobby h1{margin:0 0 12px;font-size:clamp(2rem,5vw,4rem);letter-spacing:.06em;text-shadow:0 5px 24px rgba(0,0,0,.42)} #lobby p{margin:5px 0;opacity:.9}
+#lobby input[type=text],#lobby select{padding:10px;font-size:1rem;border-radius:8px;border:1px solid rgba(255,255,255,.12);text-align:center;margin:8px;background:rgba(255,255,255,.94);color:#142033}
+#lobby input[type=color]{width:60px;height:40px;border:0;vertical-align:middle;background:none}
+button{margin-top:16px;padding:12px 28px;font-size:1.05rem;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:linear-gradient(180deg,#ffd166,#f4a900);color:#201700;cursor:pointer;font-weight:800;box-shadow:0 7px 18px rgba(0,0,0,.2);transition:transform .15s ease,filter .15s ease}button:hover{transform:translateY(-1px);filter:brightness(1.05)}button:active{transform:translateY(1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none!important;filter:none!important}
+#teamcols{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:14px;max-width:820px;width:min(92vw,820px);max-height:48vh;overflow:auto;padding:4px}
+#teamSetup{margin:10px auto 6px;padding:10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.16);max-width:420px}
+.teamcard{min-width:0;padding:12px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(7,16,30,.48);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.teamcard h3{margin:0 0 6px}.teamcard .members{min-height:44px;font-size:.9rem;line-height:1.45}.teamcard button{margin-top:8px;width:100%;padding:9px 12px;font-size:.92rem}
+@media(max-width:700px){#teamcols{grid-template-columns:repeat(2,minmax(145px,1fr));max-height:52vh}}
+@media(max-width:440px){#teamcols{grid-template-columns:1fr;max-height:55vh}}
+#modePicker{margin:14px auto 8px;max-width:860px;width:min(94vw,860px)}
+#selectedModePanel{display:none;max-width:620px;margin:8px auto;padding:14px 18px;border:1px solid rgba(255,255,255,.16);border-radius:14px;background:rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+#selectedModeTitle{font-weight:1000;font-size:1.5rem;letter-spacing:.06em}
+#practiceSettings{display:none;margin-top:12px;padding:10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.18)} #practiceSettings label{font-weight:900;letter-spacing:.04em;margin-right:8px} #practiceDifficulty{background:#101827;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:7px 10px;font-weight:800}
+#selectedModeMeta{margin-top:4px;opacity:.8;font-size:.92rem;line-height:1.45}
+.modeGrid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:16px;margin:10px 0 14px}
+.modeCard{position:relative;min-height:150px;padding:18px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:linear-gradient(145deg,rgba(31,55,83,.76),rgba(7,15,28,.78));color:#fff;text-align:left;cursor:pointer;box-shadow:0 12px 35px rgba(0,0,0,.25);overflow:hidden;transition:.18s}
+.modeCard:before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 78% 20%,rgba(255,210,100,.24),transparent 30%),linear-gradient(135deg,transparent 55%,rgba(90,190,255,.10));pointer-events:none}
+.modeCard:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.35)}
+.modeCard.selected{outline:2px solid #ffd166;box-shadow:0 0 0 1px rgba(255,209,102,.3),0 16px 42px rgba(0,0,0,.3)}
+.modeNo{font-size:.8rem;letter-spacing:.12em;opacity:.7}.modeName{font-weight:1000;font-size:1.55rem;letter-spacing:.04em;margin-top:8px}.modeMeta{margin-top:7px;font-size:.88rem;opacity:.82;line-height:1.45}.modeArt{position:absolute;right:-10px;bottom:-22px;font-size:7rem;opacity:.11;transform:rotate(-12deg)}
+#actionRow{display:none;justify-content:center;gap:12px;flex-wrap:wrap}.actionBtn{min-width:145px}.secondaryBtn{background:rgba(255,255,255,.10);color:#fff;border-color:rgba(255,255,255,.16)}
+#joinBox{padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.1)}
+#navRow{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.navBtn{background:rgba(255,255,255,.10);color:#fff;border-color:rgba(255,255,255,.18);min-width:140px;padding:10px 18px;font-size:.95rem}
+#confirmDialog{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,5,12,.72);z-index:30;padding:20px}
+#confirmBox{width:min(440px,92vw);padding:24px;border-radius:16px;background:linear-gradient(180deg,#172944,#0b1627);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.45)}#settingsPanel{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,5,12,.72);z-index:35;padding:20px}#settingsBox{width:min(520px,94vw);padding:24px;border-radius:18px;background:linear-gradient(180deg,#172944,#0b1627);border:1px solid rgba(255,255,255,.18);color:#fff;text-align:left;box-shadow:0 24px 80px rgba(0,0,0,.45)}#settingsBox h3{margin:0 0 12px;font-size:1.35rem}#settingsBox .settingRow{padding:12px 0;border-top:1px solid rgba(255,255,255,.08)}#settingsBox .settingRow:first-of-type{border-top:0}#settingsBox label{font-weight:900;display:flex;align-items:center;gap:9px}#settingsBox small{display:block;margin:6px 0 0 28px;opacity:.72;line-height:1.45}#mouseSensitivity{width:180px;vertical-align:middle;accent-color:#7cd7ff}#settingsActions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+#confirmBox h3{margin:0 0 10px;font-size:1.35rem}
+#confirmText{opacity:.85;line-height:1.5;margin:0 auto 16px;max-width:380px}
+#confirmActions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+#confirmOk{background:linear-gradient(180deg,#ff7b6e,#df3b30);color:#fff}
+#confirmCancel{background:rgba(255,255,255,.1);color:#fff}
+
+#shieldHud{position:fixed;right:18px;bottom:262px;z-index:4;color:#fff;font:900 13px ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 2px 5px #000;background:rgba(8,18,35,.45);border:1px solid rgba(110,200,255,.25);padding:8px 10px;border-radius:9px;pointer-events:none;display:none}
+#missileWarning{position:fixed;left:50%;top:17%;transform:translateX(-50%);z-index:7;display:none;color:#ff544d;font:1000 24px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-shadow:0 3px 10px #000;animation:missileFlash .42s infinite alternate}@keyframes missileFlash{from{opacity:.52}to{opacity:1;transform:translateX(-50%) scale(1.04)}}
+
+#spectatorHud{position:fixed;left:50%;top:72px;transform:translateX(-50%);z-index:5;color:#fff;font:900 14px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-shadow:0 2px 7px #000;background:rgba(3,10,18,.45);border:1px solid rgba(255,255,255,.12);padding:7px 12px;border-radius:999px;display:none;pointer-events:none}
+#radar{display:none}
+#roomCodeHud{position:fixed;left:16px;top:74px;z-index:6;color:#d9f5ff;font:900 13px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-shadow:0 2px 6px #000;background:rgba(4,14,25,.58);border:1px solid rgba(125,224,255,.2);padding:7px 10px;border-radius:9px;pointer-events:none;display:none;backdrop-filter:blur(4px)}
+#gameSettingsBtn{position:fixed;left:270px;top:16px;right:auto;z-index:16;display:none;min-width:116px;padding:9px 14px;font-size:.9rem;background:rgba(8,18,35,.72);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:blur(4px)}
+@media(max-width:760px){#gameSettingsBtn{left:16px;top:112px}}
+body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
+
+#openGamesPanel{margin:16px auto 4px;max-width:860px;width:min(94vw,860px);padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(4,12,23,.42);text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.openGamesTitle{font-weight:900;letter-spacing:.08em;font-size:.88rem}.openGamesTitle span{color:#8ee6a1;font-size:.72rem}.openGamesNote{margin-top:8px;font-size:.72rem;opacity:.58}.openGameEmpty{opacity:.55;font-size:.82rem;padding:10px 0}.openGame{display:grid;grid-template-columns:110px 1.25fr 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid rgba(255,255,255,.07);font-size:.82rem}.openGame:first-child{border-top:0}.openGameId{font:1000 1rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em}.openGameMode{font-weight:900}.openGameMeta{opacity:.72}.openGameState{font-size:.68rem;letter-spacing:.08em;border:1px solid rgba(255,255,255,.15);padding:5px 7px;border-radius:999px;text-align:center}.openGameState.live{color:#ffcf6b}.openGameState.lobby{color:#9fd2ff}.openGameSpectate{font-size:.67rem;opacity:.6}.openGame button{padding:7px 11px;border-radius:8px;border:0;background:#ffbe32;color:#121820;font-weight:900;cursor:pointer}.spectatorModeNote{margin:8px 0;padding:8px 10px;border-left:3px solid #8ee6a1;background:rgba(60,170,100,.07);font-size:.78rem;opacity:.9}
+@media(max-width:680px){.openGame{grid-template-columns:1fr auto}.openGameId{grid-row:1/3}.openGameMeta{grid-column:1/2}.openGame button{grid-column:2;grid-row:1/3}}
+@media(max-width:700px){.modeGrid{grid-template-columns:1fr}.modeCard{min-height:125px}.modeName{font-size:1.35rem}}
+#colorPalette{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin:10px auto 4px;max-width:820px}.colorChoice{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.22);padding:0;margin:0;box-shadow:0 3px 8px rgba(0,0,0,.2);cursor:pointer}.colorChoice.selected{outline:3px solid #fff;outline-offset:2px}.colorChoice.taken{opacity:.22;cursor:not-allowed;filter:grayscale(.4)}
+
+#quickAlert{position:fixed;left:50%;top:24%;transform:translateX(-50%) scale(.94);z-index:18;display:none;max-width:min(92vw,760px);padding:15px 24px;border:2px solid rgba(255,190,64,.92);border-radius:13px;background:linear-gradient(135deg,rgba(45,25,4,.96),rgba(14,19,28,.95));color:#ffe4a2;font:1000 clamp(16px,2.5vw,25px)/1.2 system-ui,sans-serif;letter-spacing:.045em;text-align:center;text-shadow:0 2px 10px #000;box-shadow:0 0 0 4px rgba(255,190,64,.12),0 12px 40px rgba(0,0,0,.5);pointer-events:none}
+#quickAlert.show{display:block;animation:quickAlertPulse .35s ease-out,quickAlertGlow .9s ease-in-out infinite alternate}
+@keyframes quickAlertPulse{from{opacity:0;transform:translateX(-50%) scale(.82)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes quickAlertGlow{from{box-shadow:0 0 0 3px rgba(255,190,64,.08),0 12px 32px rgba(0,0,0,.45)}to{box-shadow:0 0 0 7px rgba(255,190,64,.19),0 12px 40px rgba(0,0,0,.58)}}
+
+
+/* MAYDAY friends/social layer: persistent right-side drawer */
+.friendsSidebar{position:fixed;z-index:24;right:12px;top:12px;bottom:12px;width:min(350px,34vw);display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid rgba(125,224,255,.28);border-radius:16px;background:linear-gradient(155deg,rgba(9,24,42,.98),rgba(4,11,22,.98));box-shadow:0 18px 55px rgba(0,0,0,.48);color:#f3f8ff;transform:translateX(calc(100% + 28px));visibility:hidden;pointer-events:none;transition:transform .22s ease,visibility .22s ease;box-sizing:border-box}
+.friendsSidebar.open{transform:translateX(0);visibility:visible;pointer-events:auto}
+.friendsSidebarHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none;padding:2px 2px 10px;border-bottom:1px solid rgba(255,255,255,.1)}
+.friendsSidebarHeading{display:flex;align-items:baseline;gap:10px;letter-spacing:.1em;font-size:.92rem}.friendsSidebarHeading small{font-size:.65rem;letter-spacing:.05em;color:#8ee8a8}
+.friendsClose{margin:0!important;padding:3px 10px!important;font-size:1.45rem!important;line-height:1!important;box-shadow:none!important;background:rgba(255,255,255,.08)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:8px!important}
+.friendsToggle{position:fixed;z-index:25;right:0;top:42%;display:inline-flex;align-items:center;gap:9px;margin:0!important;padding:13px 11px!important;border-radius:10px 0 0 10px!important;border:1px solid rgba(125,224,255,.25)!important;border-right:0!important;background:linear-gradient(180deg,rgba(19,44,68,.98),rgba(6,17,32,.98))!important;color:#f3f8ff!important;font:900 .75rem ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.06em;box-shadow:0 10px 26px rgba(0,0,0,.35)!important;writing-mode:vertical-rl;transform:none!important}
+.friendsToggle span{color:#8ee8a8;font-size:.62rem}
+.friendsToggle[hidden]{display:none!important}
+.socialPanel{flex:1;min-height:0;width:100%;max-width:none;overflow-y:auto;margin:0;padding:0;text-align:left;border:0;border-radius:0;background:transparent;box-shadow:none;color:#f3f8ff;scrollbar-width:thin;scrollbar-color:rgba(125,224,255,.35) transparent}
+.socialPanel::-webkit-scrollbar{width:6px}.socialPanel::-webkit-scrollbar-thumb{background:rgba(125,224,255,.25);border-radius:6px}
+.socialHead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:1000;letter-spacing:.1em;font-size:.86rem}.socialStatusTag{font-size:.7rem;font-weight:800;color:#92e6ac;letter-spacing:.04em}
+.socialIdentity{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;margin-top:2px;padding:10px;border-radius:9px;background:rgba(255,255,255,.045);font-size:.78rem}.socialCode{font:1000 1.05rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;color:#82dcff}.socialSmallBtn{margin:0!important;padding:7px 9px!important;font-size:.68rem!important;border-radius:7px!important;box-shadow:none!important}
+.socialAddRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}.socialAddRow input{box-sizing:border-box;flex:1;min-width:100px;width:100%;max-width:none;padding:9px 8px!important;margin:0!important;text-align:left!important;font-size:.78rem!important;text-transform:uppercase;letter-spacing:.1em;border:1px solid rgba(125,224,255,.24)!important;border-radius:7px!important;background:rgba(255,255,255,.94)!important;color:#142033!important}.socialAddRow button{margin:0!important;padding:9px 10px!important;font-size:.68rem!important;white-space:nowrap}
+.socialFeedback{font-size:.73rem;opacity:.86;min-height:1.2em;margin:7px 1px 3px}.socialSectionTitle{font-size:.67rem;letter-spacing:.1em;font-weight:1000;opacity:.74;margin:13px 0 4px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+.socialRow{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 2px;border-top:1px solid rgba(255,255,255,.055);font-size:.78rem}.socialRowMain{display:flex;align-items:center;gap:8px;min-width:0}.socialRowMain>div{min-width:0;overflow-wrap:anywhere}.socialFriendMeta{display:block;opacity:.62;font-size:.64rem;margin-top:2px}.socialDot{width:8px;height:8px;border-radius:50%;background:#66717c;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.04)}.socialDot.online{background:#5be08a;box-shadow:0 0 0 3px rgba(91,224,138,.1)}.socialRowActions{display:flex;gap:4px;align-items:center;flex:none}.socialRowActions button{margin:0!important;padding:6px 7px!important;font-size:.63rem!important;box-shadow:none!important}.friendPresenceBadge{display:inline-flex;align-items:center;justify-content:center;padding:6px 7px;border-radius:6px;font-size:.6rem;font-weight:900;letter-spacing:.035em;white-space:nowrap;border:1px solid rgba(255,255,255,.12)}.friendPresenceBadge.inRoom{color:#ffd166;background:rgba(255,209,102,.10);border-color:rgba(255,209,102,.23)}.friendPresenceBadge.inGame{color:#5be08a;background:rgba(91,224,138,.10);border-color:rgba(91,224,138,.23)}.socialEmpty{font-size:.75rem;opacity:.6;padding:8px 2px}.socialInvitePanel{position:fixed;z-index:45;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,5,12,.78);padding:18px}.socialInviteBox{width:min(430px,94vw);padding:23px;border-radius:16px;border:1px solid rgba(125,224,255,.24);background:linear-gradient(180deg,#172944,#0b1627);color:#fff;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.55)}.socialInviteBox h3{margin:0 0 10px;letter-spacing:.08em}.socialInviteBox p{line-height:1.5;opacity:.82}.socialInviteActions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}.socialInviteActions button{margin-top:7px}.socialInviteActions .declineSocial{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.16)}
+@media(min-width:901px){#lobby.withFriendsSidebar{padding-right:380px;box-sizing:border-box}}
+@media(max-width:900px){.friendsSidebar{right:8px;top:8px;bottom:8px;width:min(360px,88vw);padding:10px}.friendsToggle{top:38%;padding:12px 8px!important}}
+@media(max-height:650px){.friendsSidebar{top:6px;bottom:6px;padding:8px}.socialIdentity{padding:7px}.socialSectionTitle{margin:8px 0 3px;padding-top:5px}.socialRow{padding:6px 2px}}
+
+
+/* Room roster quick-add controls */
+.roomPilotRow{display:flex;align-items:center;justify-content:space-between;gap:7px;min-width:0;margin:4px 0;padding:3px 0}
+.roomPilotIdentity{min-width:0;overflow-wrap:anywhere;line-height:1.45}
+.roomSocialSlot{display:inline-flex;align-items:center;justify-content:flex-end;flex:none;min-width:0}
+.roomFriendBtn{margin:0!important;padding:5px 7px!important;border-radius:6px!important;font-size:.58rem!important;font-weight:900!important;letter-spacing:.025em;white-space:nowrap;box-shadow:none!important;background:rgba(71,173,255,.14)!important;color:#9edcff!important;border:1px solid rgba(111,198,255,.32)!important}
+.teamcard .roomFriendBtn{width:auto!important;flex:none}
+.roomFriendBtn:hover:not(:disabled){background:rgba(71,173,255,.25)!important}
+.roomFriendBtn:disabled{opacity:.7;cursor:default}
+.roomFriendBtn.accept{background:rgba(91,224,138,.13)!important;color:#83f3b0!important;border-color:rgba(91,224,138,.32)!important}
+.roomFriendBtn.sent{background:rgba(255,209,102,.10)!important;color:#ffd166!important;border-color:rgba(255,209,102,.28)!important}
+.roomFriendState{font-size:.58rem;font-weight:900;letter-spacing:.04em;padding:4px 6px;border-radius:5px;white-space:nowrap}
+.roomFriendState.friend{color:#8deeb0;background:rgba(91,224,138,.09)}
+.roomFriendState.self{color:#b9c6d5;background:rgba(255,255,255,.06)}
+@media(max-width:500px){.roomPilotRow{align-items:flex-start}.roomFriendBtn{padding:5px 6px!important;font-size:.54rem!important}}
+
+
+/* Mobile/tablet gameplay support: thumb-stick + press/hold action buttons. */
+#mobileControls{display:none;position:fixed;inset:0;z-index:20;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}
+.mobileStick{position:absolute;left:max(14px,env(safe-area-inset-left));bottom:calc(24px + env(safe-area-inset-bottom));width:132px;height:132px;border-radius:50%;border:2px solid rgba(220,242,255,.5);background:radial-gradient(circle,rgba(95,145,180,.25),rgba(6,18,32,.62));box-shadow:inset 0 0 22px rgba(130,205,255,.15),0 8px 24px rgba(0,0,0,.2);pointer-events:auto;touch-action:none}
+.mobileStickLabel{position:absolute;inset:auto 0 12px;text-align:center;font:800 9px ui-monospace,monospace;letter-spacing:.18em;color:rgba(240,248,255,.55);pointer-events:none}
+.mobileStickNub{position:absolute;left:50%;top:50%;width:49px;height:49px;margin:-24.5px;border-radius:50%;border:1px solid rgba(255,255,255,.75);background:linear-gradient(145deg,rgba(160,218,255,.74),rgba(27,78,115,.78));box-shadow:0 4px 12px rgba(0,0,0,.35);transform:translate(0,0);pointer-events:none}
+.mobileActions{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(2,minmax(68px,82px));gap:7px;pointer-events:auto}
+.mobileThrottle{position:absolute;left:calc(14px + 140px);bottom:calc(30px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:7px;pointer-events:auto}
+#mobileControls button{margin:0!important;min-width:68px;min-height:49px;padding:7px 8px!important;border-radius:12px!important;border:1px solid rgba(185,224,255,.35)!important;background:linear-gradient(180deg,rgba(22,46,69,.9),rgba(6,16,30,.91))!important;color:#f4f9ff!important;font:900 10px/1.05 system-ui,sans-serif!important;letter-spacing:.04em;box-shadow:0 6px 15px rgba(0,0,0,.32)!important;touch-action:none;user-select:none;-webkit-user-select:none}
+#mobileControls button.active,#mobileControls button:active{background:linear-gradient(180deg,rgba(38,135,178,.97),rgba(11,57,87,.98))!important;border-color:rgba(151,235,255,.8)!important;transform:scale(.97)}
+#mobileControls .mobileFire{background:linear-gradient(180deg,rgba(153,46,49,.96),rgba(61,15,24,.98))!important;border-color:rgba(255,133,133,.58)!important}
+#mobileControls .mobileAccent{background:linear-gradient(180deg,rgba(36,111,133,.96),rgba(10,39,57,.98))!important}
+
+/* Landscape-first mobile gameplay and draggable Free Fire-style HUD layout. */
+#hudEditBtn{display:none;position:fixed;z-index:43;top:calc(7px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);padding:8px 12px;border:1px solid rgba(148,220,255,.55);border-radius:10px;background:rgba(5,17,31,.86);color:#eaf8ff;font:900 10px system-ui,sans-serif;letter-spacing:.07em;box-shadow:0 4px 18px rgba(0,0,0,.35);white-space:nowrap;touch-action:manipulation}
+#hudEditor{display:none;position:fixed;inset:0;z-index:46;pointer-events:none}
+.hudEditorCard{position:absolute;top:calc(47px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(340px,90vw);box-sizing:border-box;border:1px solid rgba(143,221,255,.42);border-radius:13px;background:rgba(5,15,29,.94);color:#f3f8ff;padding:10px 12px;box-shadow:0 10px 35px rgba(0,0,0,.5);text-align:center;pointer-events:auto}
+.hudEditorTitle{font:1000 13px system-ui,sans-serif;letter-spacing:.14em}.hudEditorHelp{font:600 11px/1.4 system-ui,sans-serif;color:#b9cbdc;margin:5px 0 9px}.hudEditorActions{display:flex;justify-content:center;gap:8px}.hudEditorActions button{min-height:35px;border:1px solid rgba(169,222,255,.35);border-radius:8px;padding:6px 12px;background:#142d44;color:#fff;font:900 10px system-ui,sans-serif;touch-action:manipulation}.hudEditorActions #hudDoneBtn{background:#126b79}
+#mobileControls.hud-editing{pointer-events:auto!important;z-index:45}
+#mobileControls.hud-editing .mobileStick,#mobileControls.hud-editing button{outline:2px dashed rgba(118,225,255,.95);outline-offset:2px;box-shadow:0 0 0 4px rgba(26,132,174,.2),0 6px 18px #0008!important;opacity:.96;cursor:move}
+#mobileControls.hud-editing .mobileStick{border-color:#ffe08a;background:radial-gradient(circle,rgba(244,198,88,.26),rgba(6,18,32,.86))}
+#landscapeGate{display:none;position:fixed;inset:0;z-index:1000;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;background:radial-gradient(circle at 50% 35%,#203d5c,#030812 75%);color:#fff;text-align:center}
+.landscapeCard{width:min(380px,94vw);padding:25px 22px;border:1px solid rgba(149,220,255,.23);border-radius:22px;background:rgba(6,16,30,.88);box-shadow:0 20px 70px #0009}.landscapeGlyph{font:900 58px/1 system-ui,sans-serif;color:#72dcff;animation:rotateHint 2.3s ease-in-out infinite}.landscapeCard h2{margin:12px 0 8px;font:1000 19px system-ui,sans-serif;letter-spacing:.08em}.landscapeCard p{margin:0 0 16px;color:#c6d6e5;font:600 13px/1.55 system-ui,sans-serif}.landscapeCard button{border:1px solid #74d8ff;border-radius:10px;background:linear-gradient(180deg,#1d82a4,#10445f);color:white;font:1000 12px system-ui,sans-serif;padding:11px 18px}.landscapeCard small{display:block;margin-top:12px;color:#91a7ba;font-size:10px;line-height:1.4}@keyframes rotateHint{0%,100%{transform:rotate(0)}45%,65%{transform:rotate(90deg)}}
+@media (pointer:coarse), (max-width:760px){
+  #hudEditBtn{display:block}
+  #gameSettingsBtn{display:none!important}
+  #set{display:none!important}
+  .mobileActions,.mobileThrottle{display:contents}
+  #mobileControls .mobileStick{position:fixed;right:auto;bottom:auto}
+  #mobileControls button[data-hud-key]{position:fixed;right:auto;bottom:auto;z-index:22}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  #hud{left:7px;top:7px;bottom:auto;max-width:24vw;font-size:9px;padding:5px 6px;line-height:1.28}
+  #score{right:119px;top:7px;max-width:23vw;font-size:9px;padding:5px 6px}
+  #radar{right:7px;top:55px;bottom:auto;width:clamp(88px,22vh,112px);height:clamp(88px,22vh,112px)}
+  #roomCodeHud{left:7px;top:94px;font-size:10px;padding:5px 7px}
+  #shieldHud{right:8px;bottom:auto;top:calc(60px + 22vh);font-size:10px;padding:5px 6px}
+  #landingHint{bottom:8px;min-width:0;width:min(52vw,480px);font-size:9px;padding:5px 8px}
+  #banner{top:25%;font-size:clamp(18px,5vh,29px)}
+  #toast{top:42px;max-width:65vw;font-size:11px}
+  #hudEditBtn{top:5px;font-size:9px;padding:6px 9px}
+  .hudEditorCard{top:35px}
+}
+@media (pointer:coarse) and (orientation:portrait){
+  #hudEditBtn{top:calc(6px + env(safe-area-inset-top))}
+}
+
+@media (pointer:coarse), (max-width:760px){
+ html,body{height:100%;height:100dvh;overscroll-behavior:none}
+ #lobby{box-sizing:border-box;justify-content:flex-start;align-items:stretch;overflow-y:auto;overflow-x:hidden;padding:calc(12px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+ #lobby h1{font-size:clamp(1.8rem,7vw,2.6rem);margin-bottom:8px}
+ #menu{width:100%;max-width:760px;margin:0 auto}
+ #menu>div:first-child{position:sticky;top:0;z-index:3}
+ #menu>div:nth-child(2){display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px}
+ #name{width:min(44vw,230px);min-width:130px;box-sizing:border-box}
+ #ptype{max-width:42vw}
+ #menu p{font-size:.76rem!important;line-height:1.5}
+ .modeGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .modeCard{min-height:104px;padding:10px!important}
+ .modeName{font-size:1rem!important}.modeMeta{font-size:.7rem!important}
+ #actionRow{flex-wrap:wrap;justify-content:center}
+ #actionRow button{min-width:118px}
+ #room{max-height:100%;overflow:auto;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+ #radar{width:clamp(104px,26vw,150px);height:clamp(104px,26vw,150px);right:8px;bottom:calc(154px + env(safe-area-inset-bottom));border-width:1px}
+ #hud{left:7px;bottom:calc(154px + env(safe-area-inset-bottom));min-width:0;max-width:34vw;padding:6px 7px;font-size:10px;line-height:1.35;border-radius:0 7px 7px 0}
+ #score{right:7px;top:7px;min-width:0;max-width:34vw;padding:6px 7px;font-size:10px;line-height:1.35}
+ #set{left:7px;top:7px;transform:scale(.76);transform-origin:top left}
+ #gameSettingsBtn{left:7px;top:86px;font-size:10px!important;padding:7px 9px!important}
+ #landingHint{bottom:calc(145px + env(safe-area-inset-bottom));min-width:0;width:88vw;font-size:10px}
+ #banner{top:25%;font-size:clamp(20px,6vw,34px)}
+ #toast{top:calc(42px + env(safe-area-inset-top));max-width:92vw;font-size:12px;white-space:normal;text-align:center}
+ #lock{width:48px;height:48px;border-width:2px}
+ #lock::after{top:48px;font-size:10px}
+ #friendsSidebar{z-index:31}
+ #mobileControls{display:none}
+ #mobileControls.active{display:block}
+}
+@media (max-width:470px){
+ .mobileStick{width:112px;height:112px;bottom:calc(18px + env(safe-area-inset-bottom));left:8px}
+ .mobileStickNub{width:43px;height:43px;margin:-21.5px}
+ .mobileThrottle{left:126px;bottom:calc(22px + env(safe-area-inset-bottom));gap:5px}
+ #mobileControls button{min-width:59px;min-height:43px;font-size:9px!important;padding:5px!important}
+ .mobileActions{right:7px;bottom:calc(17px + env(safe-area-inset-bottom));grid-template-columns:repeat(2,minmax(59px,70px));gap:5px}
+ #radar{bottom:calc(139px + env(safe-area-inset-bottom))}
+ #hud{bottom:calc(140px + env(safe-area-inset-bottom));max-width:32vw;font-size:9px}
+ #score{max-width:32vw;font-size:9px}
+}
+
+
+/* v63: advanced mobile HUD + gameplay preferences */
+.hudEditorCard{width:min(440px,94vw);max-height:calc(100dvh - 54px);overflow:auto;overscroll-behavior:contain;top:calc(42px + env(safe-area-inset-top));padding:9px 11px;text-align:left}
+.hudEditorTitle{text-align:center}.hudEditorHelp{text-align:center;margin:4px 0 7px}
+.hudEditorGrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;margin:8px 0}
+.hudEditorGrid label,.hudEditorField{display:flex;flex-direction:column;gap:3px;font:800 10px system-ui,sans-serif;color:#dceeff}
+.hudEditorGrid select,.hudEditorGrid input[type=range],.hudEditorGrid input[type=checkbox]{max-width:100%;accent-color:#65d9ff}
+.hudEditorGrid select{height:29px;border:1px solid #35526d;border-radius:7px;background:#0d2034;color:#fff;padding:4px;font-size:11px}
+.hudEditorGrid input[type=range]{width:100%;margin:2px 0}
+.hudEditorCheck{display:flex!important;flex-direction:row!important;align-items:center;gap:6px!important}
+.hudEditorSlots{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+.hudEditorSlots select{height:31px;border:1px solid #35526d;border-radius:7px;background:#0d2034;color:#fff;padding:4px;font-size:11px}
+.hudEditorActions{gap:5px;flex-wrap:wrap;margin-top:6px}
+.hudEditorActions button,.hudEditorSlots button{min-height:31px;padding:5px 8px;font-size:9px}
+.hudEditorActions button[data-preset]{background:#183f55}
+#mobileSettingsBtn{display:none;position:fixed;z-index:43;top:calc(7px + env(safe-area-inset-top));left:calc(50% + 87px);padding:7px 9px;border:1px solid rgba(148,220,255,.45);border-radius:9px;background:rgba(5,17,31,.88);color:#eaf8ff;font:900 9px system-ui,sans-serif;letter-spacing:.04em;white-space:nowrap;touch-action:manipulation}
+#mobileSettingsPanel{display:none;position:fixed;inset:0;z-index:1200;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(0,5,12,.84);color:#f2f8ff;overscroll-behavior:contain}
+.mobileSettingsCard{width:min(520px,96vw);max-height:92dvh;overflow:auto;box-sizing:border-box;padding:14px;border:1px solid rgba(125,224,255,.32);border-radius:15px;background:linear-gradient(180deg,#142840,#071322);box-shadow:0 22px 80px #000b}
+.mobileSettingsCard h2{margin:0 0 6px;font:1000 16px system-ui,sans-serif;letter-spacing:.06em}.mobileSettingsIntro{font-size:11px;color:#b8cada;margin-bottom:9px}
+.mobileSettingRow{display:grid;grid-template-columns:minmax(120px,1fr) minmax(150px,1.1fr);align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.075);font-size:12px;font-weight:800}
+.mobileSettingRow input[type=range]{width:100%;accent-color:#6ddcff}.mobileSettingRow input[type=checkbox]{width:18px;height:18px;accent-color:#6ddcff}.mobileSettingRow select{width:100%;min-width:0;padding:7px;border-radius:7px;border:1px solid #35526d;background:#0b1c2f;color:white}
+.mobileSettingControl{display:flex;align-items:center;gap:7px;justify-content:flex-end;min-width:0}.mobileSettingControl output{min-width:36px;text-align:right;font:900 10px ui-monospace,monospace;color:#8de4ff}
+.mobileSettingsActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}.mobileSettingsActions button{padding:9px 12px;border:1px solid #42647e;border-radius:8px;background:#153853;color:#fff;font:900 11px system-ui,sans-serif}.mobileSettingsActions #mobileSettingsDone{background:#147184}
+#fpsMeter{display:none;position:fixed;z-index:6;right:8px;bottom:8px;padding:4px 6px;border:1px solid #ffffff30;border-radius:6px;background:#06101dcc;color:#adf5cf;font:900 10px ui-monospace,monospace;pointer-events:none}
+.hudItemSelected{outline:2px solid #ffe08a!important;outline-offset:3px}
+#mobileControls .hud-control-hidden{visibility:hidden;pointer-events:none}
+#mobileControls.hud-editing .hud-control-hidden{visibility:visible!important;opacity:.33!important;pointer-events:auto!important}
+@media (pointer:coarse),(max-width:760px){#mobileSettingsBtn{display:block}}
+@media (pointer:coarse) and (orientation:landscape){#mobileSettingsBtn{top:5px;font-size:8px;padding:6px 7px;left:calc(50% + 80px)}.hudEditorCard{top:32px;max-height:calc(100dvh - 38px);width:min(440px,92vw)}.mobileSettingsCard{padding:10px;max-height:94dvh}.mobileSettingRow{padding:5px 0;font-size:11px}}
+@media (pointer:coarse) and (max-width:650px){.hudEditorGrid{gap:5px}.hudEditorActions button,.hudEditorSlots button{font-size:8px;padding:5px 6px}.mobileSettingRow{grid-template-columns:minmax(100px, .9fr) minmax(135px,1.1fr);gap:6px}}
+
+</style></head><body>
+<canvas id="radar" width="240" height="240"></canvas><div id="roomCodeHud"></div><div id="missileWarning"></div><div id="shieldHud"></div><div id="spectatorHud"></div><div id="hud"></div><div id="landingHint"></div><div id="score"></div><div id="toast"></div><div id="quickAlert" role="status" aria-live="assertive"></div><div id="cross"></div><button id="killReplayBtn" type="button" aria-label="Play kill replay from the killer’s point of view when available">↻ KILL REPLAY (P)</button><div id="killConfirm"><span class="killIcon">☠</span><span class="killWord">KILL</span><span class="killTarget"></span></div><div id="lock"></div><div id="warn"></div><div id="win"></div><div id="banner"></div>
+<button id="gameSettingsBtn" class="navBtn">⚙ SETTINGS</button>
+<button id="hudEditBtn" type="button" aria-label="Customize touch control layout">☷ HUD SETTINGS</button>
+<button id="mobileSettingsBtn" type="button" aria-label="Mobile flight and performance settings">⚙ MOBILE</button>
+<div id="hudEditor" role="dialog" aria-label="Touch HUD layout editor">
+  <div class="hudEditorCard">
+    <div class="hudEditorTitle">ADVANCED HUD EDITOR</div>
+    <div class="hudEditorHelp">Drag controls to move them. Choose a control below to resize, fade, or hide it.</div>
+    <div class="hudEditorGrid">
+      <label>CONTROL<select id="hudControlSelect"><option value="stick">Flight stick</option><option value="throttle">Throttle</option><option value="brake">Brake</option><option value="boost">Boost</option><option value="camera">Camera</option><option value="fire">Fire</option><option value="missile">Missile</option><option value="flare">Flare</option><option value="shield">Shield</option><option value="rear">Rear view</option><option value="mayday">MAYDAY alert</option></select></label>
+      <label>HUD SLOT<select id="hudSlotSelect"><option value="A">Layout A</option><option value="B">Layout B</option><option value="C">Layout C</option></select></label>
+      <label>SIZE <span id="hudSizeValue">100%</span><input id="hudSizeRange" type="range" min="0.65" max="1.5" step="0.05" value="1"></label>
+      <label>TRANSPARENCY <span id="hudOpacityValue">100%</span><input id="hudOpacityRange" type="range" min="0.25" max="1" step="0.05" value="1"></label>
+      <label class="hudEditorCheck"><input id="hudHideControl" type="checkbox"> Hide selected control</label>
+      <label class="hudEditorCheck"><input id="hudShowLabels" type="checkbox" checked> Show control labels</label>
+    </div>
+    <div class="hudEditorSlots"><button id="hudSaveSlotBtn" type="button">SAVE SLOT</button><button id="hudLoadSlotBtn" type="button">LOAD SLOT</button></div>
+    <div class="hudEditorActions"><button type="button" data-preset="two">2-THUMB PRESET</button><button type="button" data-preset="four">4-FINGER PRESET</button><button id="hudResetBtn" type="button">RESET DEFAULT</button><button id="hudDoneBtn" type="button">DONE</button></div>
+    <div class="hudEditorHelp" style="margin-bottom:0">Layouts save in this browser. Hidden controls appear dimmed while editing.</div>
+  </div>
+</div>
+<div id="mobileSettingsPanel" role="dialog" aria-modal="true" aria-label="Mobile flight and performance settings">
+  <div class="mobileSettingsCard">
+    <h2>FLIGHT & PERFORMANCE</h2>
+    <div class="mobileSettingsIntro">Settings are saved to this device/browser. Touch the open sky and drag to look around.</div>
+    <div class="mobileSettingRow"><label for="mobileJoystickSensitivity">Flight-stick sensitivity</label><div class="mobileSettingControl"><input id="mobileJoystickSensitivity" type="range" min="0.5" max="1.8" step="0.1" value="1"><output id="mobileJoystickSensitivityValue">1.0×</output></div></div>
+    <div class="mobileSettingRow"><label for="mobileCameraSensitivity">Camera-look sensitivity</label><div class="mobileSettingControl"><input id="mobileCameraSensitivity" type="range" min="0.4" max="2.4" step="0.1" value="1"><output id="mobileCameraSensitivityValue">1.0×</output></div></div>
+    <div class="mobileSettingRow"><label for="mobileInvertPitch">Invert flight-stick pitch</label><div class="mobileSettingControl"><input id="mobileInvertPitch" type="checkbox"></div></div>
+    <div class="mobileSettingRow"><label for="mobileAutoLevel">Auto-level when stick is released</label><div class="mobileSettingControl"><input id="mobileAutoLevel" type="checkbox"></div></div>
+    <div class="mobileSettingRow"><label for="mobileFlightModel">Flight handling</label><div class="mobileSettingControl"><select id="mobileFlightModel"><option value="arcade">Arcade</option><option value="realistic">Realistic</option></select></div></div>
+    <div class="mobileSettingRow"><label for="mobileGraphicsPreset">Graphics quality</label><div class="mobileSettingControl"><select id="mobileGraphicsPreset"><option value="low">Low · smoother</option><option value="medium">Medium · balanced</option><option value="high">High · sharper</option></select></div></div>
+    <div class="mobileSettingRow"><label for="mobileShowFps">Show FPS counter</label><div class="mobileSettingControl"><input id="mobileShowFps" type="checkbox"></div></div>
+    <div class="mobileSettingRow"><label for="mobileVibrateHit">Vibrate on hit</label><div class="mobileSettingControl"><input id="mobileVibrateHit" type="checkbox"><span id="mobileVibrationSupport" style="font-size:9px;color:#94aabd"></span></div></div>
+    <div class="mobileSettingsActions"><button id="mobileSettingsReset" type="button">RESET SETTINGS</button><button id="mobileSettingsDone" type="button">DONE</button></div>
+  </div>
+</div>
+<div id="fpsMeter" aria-live="off">FPS --</div>
+<div id="landscapeGate" role="dialog" aria-live="polite" aria-label="Rotate phone to landscape">
+  <div class="landscapeCard"><div class="landscapeGlyph">↻</div><h2>ROTATE YOUR PHONE</h2><p>MAYDAY plays horizontally. Turn your phone sideways to continue.</p><button id="retryLandscapeBtn" type="button">TRY LANDSCAPE</button><small>If your browser can't lock orientation, rotate the phone manually.</small></div>
+</div>
+<div id="mobileControls" aria-label="Touch flight controls">
+  <div id="mobileStick" class="mobileStick" data-hud-key="stick" aria-label="Flight stick"><div class="mobileStickLabel">STEER</div><div id="mobileStickNub" class="mobileStickNub"></div></div>
+  <div class="mobileThrottle">
+    <button type="button" data-mobile-hold="throttle" data-hud-key="throttle">THROTTLE +</button>
+    <button type="button" data-mobile-hold="brake" data-hud-key="brake">BRAKE</button>
+    <button type="button" data-mobile-hold="boost" data-hud-key="boost" class="mobileAccent">BOOST</button>
+  </div>
+  <div class="mobileActions">
+    <button type="button" data-mobile-hold="fire" data-hud-key="fire" class="mobileFire">FIRE</button>
+    <button type="button" data-mobile-hold="missile" data-hud-key="missile">MISSILE</button>
+    <button type="button" data-mobile-tap="flare" data-hud-key="flare">FLARE</button>
+    <button type="button" data-mobile-tap="shield" data-hud-key="shield" id="mobileShieldBtn">SHIELD</button>
+    <button type="button" data-mobile-hold="rear" data-hud-key="rear">REAR VIEW</button>
+    <button type="button" data-mobile-tap="camera" data-hud-key="camera">CAMERA</button>
+    <button type="button" data-mobile-hold="mayday" data-hud-key="mayday" id="mobileMaydayBtn">HOLD MAYDAY</button>
+  </div>
+</div>
+<div id="set"><b>Sensitivity</b> (O = hide/show)<br>Up/Down <input id="sp" type="range" min=".3" max="3" step=".1" value="1"><br>Tilt A/D <input id="sr" type="range" min=".3" max="3" step=".1" value="1"><br>Turn &larr;/&rarr; <input id="sy" type="range" min=".3" max="3" step=".1" value="1"></div>
+<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v63.0-mobile-gameplay-polish</div>
+<div id="menu"><div style="display:flex;justify-content:flex-end;max-width:920px;margin:0 auto 2px"><button id="openSettings" class="navBtn" style="margin-top:0;min-width:120px">⚙ SETTINGS</button></div>
+<div><input id="name" type="text" placeholder="Your name" maxlength="14"> <label>Plane <select id="ptype" style="padding:8px;font-size:1rem;border-radius:8px;border:0"><option value="fighter">Fighter · 75 HP · fast & agile</option><option value="balanced" selected>Balanced · 100 HP · all-round</option><option value="heavy">Heavy · 150 HP · tough, slow turns</option><option value="interceptor">Interceptor · 90 HP · very fast · sharp turns</option><option value="striker">Strike Fighter · 175 HP · heavy assault · broad wings</option></select></label> <span id="colorIntro" style="opacity:.75">Pilot color and aircraft can be changed inside the room.</span></div>
+<label style="display:block;margin:10px;font-size:1.05rem"><input type="checkbox" id="inv" style="width:18px;height:18px;vertical-align:middle"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label>
+<p><b>PC:</b> W accelerate · S brake · ↑/↓ pitch · A/D tilt · ←/→ turn · SPACE shoot · F missile · R flares · SHIFT boost. <b>Phones:</b> use the on-screen flight stick and action buttons; drag the open sky to look around. Use HUD SETTINGS to resize, fade, hide, or save layouts; ⚙ MOBILE adjusts sensitivity, handling, graphics, FPS, auto-level and vibration.</p>
+<p><b>Hold enemy in sights 3s = LOCK</b> · <b>Lock limit 4.2 km</b> · clouds can break lock · <b>O</b> hide/show sensitivity + settings · <b>C</b> camera · <b>Hold X</b> rear view · <b>I</b> invert pitch · <b>Tab</b> spectate · <b>Hold G for 1 second</b> to send a room-wide “MAYDAY” alert (Clash Squad) · <b>P</b> replay your last death when available · <b>Q</b> shield (Clash Squad, 7s) · <b>R</b> countermeasures · <b>SETTINGS</b> = optional mouse controls</p><p>🌲 Forests · ✈ 2 neutral air-landing runways with green edge lights · 🧭 Rotating map by default · <b>M</b> toggles North-up · 💥 crash fire & smoke</p>
+<div id="modePicker">
+<div style="font-weight:1000;font-size:1.12rem;letter-spacing:.08em;margin-bottom:8px">SELECT MODE</div>
+<div class="modeGrid">
+<button class="modeCard" data-mode="ffa"><div class="modeNo">01</div><div class="modeName">DOGFIGHT</div><div class="modeMeta">Everyone against everyone.<br>Respawn after a kill · first to 10.</div><div class="modeArt">✈</div></button>
+<button class="modeCard" data-mode="clash"><div class="modeNo">02</div><div class="modeName">CLASH SQUAD</div><div class="modeMeta">Team elimination combat.<br>2–6 teams · 3 shields per round · last team alive wins.</div><div class="modeArt">⚔</div></button>
+<button class="modeCard" data-mode="survivor"><div class="modeNo">03</div><div class="modeName">SURVIVOR</div><div class="modeMeta">Everyone against everyone.<br>1–5 lives · last pilot remaining wins.</div><div class="modeArt">☠</div></button>
+<button class="modeCard" data-mode="practice"><div class="modeNo">04</div><div class="modeName">PRACTICE</div><div class="modeMeta">Solo training arena.<br>Fight moving AI target aircraft · no room code.</div><div class="modeArt">◎</div></button>
+</div>
+<div id="selectedModePanel"><div id="selectedModeTitle"></div><div id="selectedModeMeta"></div><div id="practiceSettings"><label for="practiceDifficulty">BOT DIFFICULTY</label><select id="practiceDifficulty"><option value="easy">EASY</option><option value="normal" selected>NORMAL</option><option value="hard">HARD</option></select><div style="margin-top:6px;font-size:.82rem;opacity:.72">Bots fire guns and can launch tracking missiles. Higher difficulty improves aim, reaction and firing frequency.</div></div></div>
+<div id="actionRow"><button id="hostMode" class="actionBtn">HOST</button><button id="joinMode" class="actionBtn secondaryBtn">JOIN</button><button id="practiceMode" class="actionBtn" style="display:none">ENTER PRACTICE</button><button id="backToModes" class="navBtn">← BACK TO MODES</button></div>
+<div id="recoveryPanel" style="display:none;margin:10px auto 0;max-width:920px;padding:12px 14px;border:1px solid rgba(125,224,255,.25);border-radius:12px;background:rgba(10,30,45,.55)"><div style="font-weight:1000;letter-spacing:.08em">↩ CONTINUE LAST GAME</div><div id="recoveryText" style="margin:4px 0 9px;opacity:.78;font-size:.88rem"></div><button id="resumeLastGame" class="actionBtn">CONTINUE</button> <button id="forgetLastGame" class="navBtn">DISCARD</button></div>
+<div id="joinBox" style="display:none;margin-top:10px">
+<div style="margin-bottom:6px;font-weight:900;letter-spacing:.06em">JOIN A ROOM</div>
+<input id="code" type="text" placeholder="GAME CODE" maxlength="4" autocomplete="off" style="text-transform:uppercase;width:140px;letter-spacing:.15em"> 
+<button id="join">JOIN / WATCH</button><br><small style="opacity:.75">Enter the 4-character Game Code. Waiting room = join as a pilot · live match = join as a spectator. In spectator mode, <b>TAB</b> = next pilot · <b>SHIFT+TAB</b> = previous pilot.</small><div id="navRow"><button id="backFromJoin" class="navBtn">← BACK</button></div>
+</div>
+</div>
+<p id="modeHelp" style="max-width:620px;margin:8px auto;font-size:.9rem;opacity:.86">Dogfight: everyone for themselves · respawn after each kill · first to 10 kills.</p>
+<p id="err" style="color:#ffd36a;min-height:1.2em"></p>
+</div>
+<div id="room" style="display:none">
+<h2 style="margin:4px"><span id="rmode"></span></h2>
+<h2 style="margin:4px">Game Code: <span id="rcode" style="letter-spacing:6px;font-size:2.2rem"></span></h2>
+<p style="opacity:.8">Give this Game Code to your friend. They can enter it from <b>JOIN</b> to join the room or spectate the live match.</p>
+<div id="teamSetup" style="display:none"></div>
+<div id="colorPalette" style="display:none"></div>
+<div id="teamcols"></div>
+<div id="ffacol" style="display:none;margin:12px"><h3>PILOTS</h3><div id="fl"></div></div>
+<p id="rstat"></p><div id="roomNav"><button id="leaveRoom" class="navBtn">← LEAVE ROOM</button><button id="start" style="display:none">Start game</button></div>
+</div></div>
+<button id="friendsToggle" class="friendsToggle" type="button" aria-controls="friendsSidebar" aria-expanded="false">👥 FRIENDS <span id="friendsToggleOnline">0 ONLINE</span></button>
+<aside id="friendsSidebar" class="friendsSidebar open" aria-label="MAYDAY friends sidebar">
+  <div class="friendsSidebarHeader"><div class="friendsSidebarHeading"><strong>FRIENDS</strong><small id="friendsSidebarOnlineCount">0 ONLINE</small></div><button id="closeFriendsSidebar" class="friendsClose" type="button" aria-label="Close friends sidebar">×</button></div>
+  <div id="friendsSidebarPanel" class="socialPanel" aria-label="Friends, Game UID, and room invitations"></div>
+</aside>
+<div id="settingsPanel"><div id="settingsBox"><h3>⚙ MAYDAY SETTINGS</h3><div class="settingRow"><label><input id="mouseControls" type="checkbox"> Enable mouse flight controls</label><small>When enabled in a match: move mouse left/right = turn, move mouse up/down = pitch, hold left mouse = fire, hold right mouse = look back, middle click = shield (Clash Squad). Mouse locks automatically when the match starts; <b>Shift+F1</b> unlocks/locks it.</small></div><div class="settingRow"><label for="mouseSensitivity">Mouse sensitivity <input id="mouseSensitivity" type="range" min="1" max="200" step="1" value="100"></label><small><span id="mouseSensitivityValue">100%</span> · 100% is the current default; 200% is twice as sensitive. Applies to flight movement only.</small></div><div id="settingsActions"><button id="closeSettings" class="secondaryBtn">CLOSE</button></div></div></div>
+<div id="socialInviteDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="socialInviteTitle"><div class="socialInviteBox"><h3 id="socialInviteTitle">MAYDAY ROOM INVITATION</h3><p id="socialInviteText"></p><div class="socialInviteActions"><button id="declineSocialInvite" class="declineSocial">DECLINE</button><button id="acceptSocialInvite">ACCEPT & JOIN</button></div></div></div>
+<div id="confirmDialog"><div id="confirmBox"><h3 id="confirmTitle">Leave?</h3><p id="confirmText"></p><div id="confirmActions"><button id="confirmCancel">CANCEL</button><button id="confirmOk">LEAVE</button></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/client.js?v=v63.0-mobile-gameplay-polish"></script></body></html>

@@ -1,0 +1,21 @@
+# Recommended for persistent Game UIDs and friendships.
+# Persistent disks require a paid Render web-service plan.
+services:
+  - type: web
+    name: mayday-online
+    runtime: node
+    plan: 0.5c-512mb
+    region: singapore
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    disk:
+      name: mayday-social-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MAYDAY_DATA_DIR
+        value: /var/data

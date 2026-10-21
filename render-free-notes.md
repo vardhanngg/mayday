@@ -1,0 +1,1 @@
+The default `render.yaml` is the free playtest route. If you need permanent Game UIDs and friendships, configure a paid persistent disk with mount path `/var/data` and set `MAYDAY_DATA_DIR=/var/data` as described in `render-persistent.yaml`.

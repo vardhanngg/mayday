@@ -1,0 +1,15 @@
+# Low-cost/free playtest configuration. This is intended for quick online testing.
+# Render's free web service has an ephemeral filesystem and may spin down while idle.
+services:
+  - type: web
+    name: mayday-online
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
