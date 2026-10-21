@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v64.0-online-ready';
+const MAYDAY_BUILD='v65.0-room-exit-fix';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -598,40 +598,57 @@ function closeConfirmDialog(){
   if(ok)ok.blur();
   if(cancel)cancel.blur();
 }
+let homeTransitionSeq=0;
+function forceMainMenuView(){
+  const display=(id,value)=>{const el=document.getElementById(id);if(el)el.style.display=value};
+  // Put home in front before cleanup; closing a room should never be blocked by an overlay.
+  display('lobby','flex');display('menu','block');display('room','none');display('joinBox','none');
+  display('win','none');display('confirmDialog','none');display('settingsPanel','none');
+  display('landscapeGate','none');display('hudEditor','none');
+  const win=document.getElementById('win');if(win)win.classList.remove('resultsScreen');
+  const modeGrid=document.querySelector('.modeGrid');if(modeGrid)modeGrid.style.display='grid';
+  display('selectedModePanel','none');display('actionRow','none');
+}
 function goMainMenu(){
-  reportSocialStatus('lobby','');
-  // Always dismiss modal overlays first so an accidental leave can never leave the UI blocked.
-  closeConfirmDialog();
-  const settingsPanel=document.getElementById('settingsPanel');
-  if(settingsPanel)settingsPanel.style.display='none';
-  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;practiceKills=0;practiceRespawnAt=0;roomMode='clash';roomInfo=null;roomCode='';isHost=false;specIdx=0;specId=null;snapPlayers={};clearWorld();
-  if(plane){scene.remove(plane);plane=null}
+  // Reset local state and expose home first. Cleanup helpers are isolated so a failure
+  // in one subsystem cannot leave the player trapped behind the room/results UI.
+  roomExitInProgress=true;
+  const transition=++homeTransitionSeq;
+  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;practiceKills=0;practiceRespawnAt=0;
+  roomMode='clash';roomInfo=null;roomCode='';isHost=false;specIdx=0;specId=null;snapPlayers={};
+  forceMainMenuView();
+  try{closeConfirmDialog()}catch(e){console.warn('MAYDAY menu: dialog cleanup failed',e)}
+  try{const settingsPanel=document.getElementById('settingsPanel');if(settingsPanel)settingsPanel.style.display='none'}catch(e){}
+  try{clearWorld()}catch(e){console.warn('MAYDAY menu: world cleanup failed',e)}
+  try{if(plane){scene.remove(plane);plane=null}}catch(e){plane=null}
   landed=false;landingStrip=null;shieldUntil=0;protEnd=0;lockId=null;lockT=0;warns={};
-  setMusic(true);resetModeSelection();hideGameplayUi();
-  document.getElementById('lobby').style.display='flex';document.getElementById('menu').style.display='block';document.getElementById('room').style.display='none';document.getElementById('joinBox').style.display='none';
-  document.getElementById('modeHelp').textContent='Select a mode to continue.';
-  document.getElementById('err').textContent='';
-  const forceLobby=()=>{if(roomExitInProgress&&!inGame&&!roomCode){const lobby=document.getElementById('lobby'),menu=document.getElementById('menu'),room=document.getElementById('room'),joinBox=document.getElementById('joinBox');if(lobby)lobby.style.display='flex';if(menu)menu.style.display='block';if(room)room.style.display='none';if(joinBox)joinBox.style.display='none';}};
-  requestAnimationFrame(forceLobby);
+  try{setMusic(true)}catch(e){}
+  try{resetModeSelection()}catch(e){console.warn('MAYDAY menu: mode reset failed',e)}
+  try{hideGameplayUi()}catch(e){console.warn('MAYDAY menu: HUD cleanup failed',e)}
+  try{document.getElementById('modeHelp').textContent='Select a mode to continue.';document.getElementById('err').textContent=''}catch(e){}
+  try{reportSocialStatus('lobby','')}catch(e){console.warn('MAYDAY menu: presence update failed',e)}
+  forceMainMenuView();
+  const enforce=()=>{if(transition!==homeTransitionSeq||!roomExitInProgress||inGame||roomCode)return;forceMainMenuView()};
+  requestAnimationFrame(enforce);setTimeout(enforce,100);setTimeout(enforce,450);
 }
 function leaveRoom(reason='menu',confirmHost=true){
   let handled=false;
   const doLeave=()=>{
-    if(handled)return;
-    handled=true;
-    closeConfirmDialog();
-    roomExitInProgress=true;
-    intentionalDisconnect=true;
-    clearRecoverySession();
+    if(handled)return;handled=true;
+    roomExitInProgress=true;intentionalDisconnect=true;clearRecoverySession();
     const leavingSocket=ws;
-    if(leavingSocket===socialSocket&&socialSocket?.readyState===WebSocket.OPEN){
-      sendSocial({t:'socialLeaveGame'});
-      ws=null;
-    }else{
-      try{if(leavingSocket&&leavingSocket.readyState===WebSocket.OPEN){leavingSocket.send(JSON.stringify({t:'leave'}));leavingSocket.close(1000,'left room');}else if(leavingSocket&&leavingSocket.readyState===WebSocket.CONNECTING)leavingSocket.close();}catch(e){}
-      ws=null;
-    }
+    // Stop routing late gameplay packets before starting the teardown.
+    ws=null;
     goMainMenu();
+    try{
+      if(leavingSocket===socialSocket&&socialSocket?.readyState===WebSocket.OPEN){
+        // The already-connected social socket doubles as the room socket for invited joins.
+        sendSocial({t:'socialLeaveGame'});
+      }else if(leavingSocket&&leavingSocket.readyState===WebSocket.OPEN){
+        leavingSocket.send(JSON.stringify({t:'leave'}));
+        leavingSocket.close(1000,'left room');
+      }else if(leavingSocket&&leavingSocket.readyState===WebSocket.CONNECTING){leavingSocket.close()}
+    }catch(e){console.warn('MAYDAY room leave cleanup failed',e)}
     intentionalDisconnect=false;
   };
   if(confirmHost&&isHost&&roomInfo&&roomInfo.state==='lobby')showConfirm('LEAVE HOST ROOM?','You are the host. Leaving will close your connection and the host role will pass to another player when possible.','LEAVE ROOM',doLeave);
