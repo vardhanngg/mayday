@@ -1,4 +1,4 @@
-# MAYDAY v64.0 — Online-ready browser multiplayer
+# MAYDAY v65.0 — Online-ready browser multiplayer + reliable room exit
 
 This build prepares the v63 game for a public WebSocket-capable Node host.
 
@@ -57,3 +57,8 @@ Check version/health:
 ## Checks
 
 Run `npm run check` to syntax-check both JavaScript files.
+
+
+## v65.0 room exit fix
+
+Home navigation is made resilient for both room leave and results-screen exit. The client now exposes the lobby before cleanup, catches cleanup errors, disables further handling on the previous game socket, and reasserts the lobby view after the next frames. The HTML script URL includes the v65 cache-buster.
