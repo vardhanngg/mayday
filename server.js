@@ -461,6 +461,9 @@ function createQuickMatch(mode,batch){
 }
 function backfillQueuedPilots(mode,queue,now){
   const cfg=MATCHMAKING[mode],minimumWait=Math.min(5000,Math.max(500,Math.round(cfg.timeoutMs/2)));
+  // Keep recently-arrived pilots together: do not siphon an older queued pilot into
+  // another live room while a newer pilot is still within the same backfill window.
+  if(queue.some(entry=>now-entry.queuedAt<minimumWait))return;
   for(let i=0;i<queue.length;){
     const entry=queue[i];
     if(now-entry.queuedAt<minimumWait){i++;continue}
