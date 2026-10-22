@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v74.0-challenge-radar-engine-audio';
+const MAYDAY_BUILD='v76.0-ai-matchmaking';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -345,7 +345,7 @@ document.getElementById('hudShowLabels')?.addEventListener('change',e=>{mobilePr
 document.getElementById('retryLandscapeBtn')?.addEventListener('click',requestLandscapeForGame);
 
 // Orientation locking must be requested within the user's tap gesture when supported.
-document.addEventListener('pointerdown',e=>{if(!mobileTouchEnabled||inGame)return;if(e.target.closest('#practiceMode,#challengeMode,#hostMode,#join,#acceptSocialInvite,#start'))requestLandscapeForGame()},{capture:true});
+document.addEventListener('pointerdown',e=>{if(!mobileTouchEnabled||inGame)return;if(e.target.closest('#practiceMode,#challengeMode,#hostMode,#quickMatch,#join,#acceptSocialInvite,#start'))requestLandscapeForGame()},{capture:true});
 function mobileSettingValue(id){return document.getElementById(id)}
 function syncMobileSettingsUi(){const setRange=(id,value,out,mult='×')=>{const el=mobileSettingValue(id),o=mobileSettingValue(out);if(el)el.value=value;if(o)o.textContent=Number(value).toFixed(1)+mult};setRange('mobileJoystickSensitivity',mobilePrefs.joystickSensitivity,'mobileJoystickSensitivityValue');setRange('mobileCameraSensitivity',mobilePrefs.cameraSensitivity,'mobileCameraSensitivityValue');for(const [id,key] of [['mobileInvertPitch','invertPitch'],['mobileAutoLevel','autoLevel'],['mobileShowFps','showFps'],['mobileVibrateHit','vibrateOnHit']]){const el=mobileSettingValue(id);if(el)el.checked=!!mobilePrefs[key]}const fm=mobileSettingValue('mobileFlightModel'),gp=mobileSettingValue('mobileGraphicsPreset'),support=mobileSettingValue('mobileVibrationSupport');if(fm)fm.value=mobilePrefs.flightModel;if(gp)gp.value=mobilePrefs.graphicsPreset;if(support)support.textContent=('vibrate' in navigator)?'':'Not supported'}
 function applyGraphicsPreset(preset,save=true){const allowed=['low','medium','high'];graphicsPreset=allowed.includes(preset)?preset:'medium';mobilePrefs.graphicsPreset=graphicsPreset;const cfg=graphicsPreset==='low'?{dpr:TOUCH_DEVICE ? .82 : 1,shadow:false,shadowSize:512,particles:150,fogNear:4300,fogFar:14000}:graphicsPreset==='medium'?{dpr:TOUCH_DEVICE?1.05:1.35,shadow:true,shadowSize:1024,particles:360,fogNear:5500,fogFar:17000}:{dpr:TOUCH_DEVICE?1.3:1.75,shadow:true,shadowSize:2048,particles:700,fogNear:6000,fogFar:18500};particleBudget=cfg.particles;graphicsFogNear=cfg.fogNear;graphicsFogFar=cfg.fogFar;ren.setPixelRatio(Math.min(devicePixelRatio,cfg.dpr));ren.setSize(innerWidth,innerHeight);ren.shadowMap.enabled=cfg.shadow;sun.castShadow=cfg.shadow;sun.shadow.mapSize.set(cfg.shadowSize,cfg.shadowSize);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}ren.shadowMap.needsUpdate=true;scene.fog.near=cfg.fogNear;scene.fog.far=cfg.fogFar;if(save)persistMobilePreferences()}
@@ -969,14 +969,16 @@ function connect(first){
  pickedColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';invert=document.getElementById('inv').checked?1:-1;ptype=document.getElementById('ptype').value;maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;saveSet();
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws=socket;
  socket.onopen=()=>{if(ws!==socket){try{socket.close(1000,'superseded')}catch{}return}const outgoing=Object.assign({n:document.getElementById('name').value||'Pilot',ty:ptype,colorId:selectedColorId,profileId:socialIdentity?.id,profileToken:socialIdentity?.token},first);if(outgoing.inviteId)inviteDebug('game socket open; sending join',`id=${String(outgoing.inviteId).slice(0,8)} room=${outgoing.roomId||outgoing.code} profile=${outgoing.profileId||'MISSING'} token=${outgoing.profileToken?'present':'MISSING'}`);socket.send(JSON.stringify(outgoing))};
- socket.onerror=()=>{if(ws!==socket)return;inviteDebug('game socket error',`host=${location.host} invite=${String(first?.inviteId||'').slice(0,8)||'-'}`);errEl.textContent='Could not reach the server.';if(joiningSocialInviteId)finishSocialInviteJoin(false,'','Could not connect to the game server.')};
- socket.onclose=()=>{if(ws!==socket)return;if(joiningSocialInviteId&&!roomCode)finishSocialInviteJoin(false,'','The game connection closed before joining the room.');if(!intentionalDisconnect){toast('Disconnected from server');reportSocialStatus('lobby')}intentionalDisconnect=false};
+ socket.onerror=()=>{if(ws!==socket)return;inviteDebug('game socket error',`host=${location.host} invite=${String(first?.inviteId||'').slice(0,8)||'-'}`);errEl.textContent='Could not reach the server.';if(first?.t==='matchmake')updateMatchmakingUi('error',{mode:first.mode,message:'Could not reach the matchmaking server.'});if(joiningSocialInviteId)finishSocialInviteJoin(false,'','Could not connect to the game server.')};
+ socket.onclose=()=>{if(ws!==socket)return;if(first?.t==='matchmake'&&!roomCode&&matchmakingActive)updateMatchmakingUi('error',{mode:first.mode,message:'Connection to matchmaking was lost. Please search again.'});if(joiningSocialInviteId&&!roomCode)finishSocialInviteJoin(false,'','The game connection closed before joining the room.');if(!intentionalDisconnect){toast('Disconnected from server');reportSocialStatus('lobby')}intentionalDisconnect=false};
  socket.onmessage=e=>handleGameMessage(socket,first,e.data);
 }
 function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try{m=JSON.parse(rawData)}catch{return}const isReconnect=first?.t==='reconnect';
   if(first?.inviteId&&(m.t==='welcome'||m.t==='err'))inviteDebug(`game server ${m.t}`,`id=${String(first.inviteId).slice(0,8)} room=${m.code||m.roomId||roomCode||'-'} inviteEcho=${m.inviteId||'-'} message=${m.m||'-'}`);
   if(m.t==='serverRestarting'){toast('MAYDAY server is restarting. Please reconnect in a moment.');return}
+  if(m.t==='matchmaking'){updateMatchmakingUi(m.status,m);return}
   if(m.t==='err'){
+   if(first?.t==='matchmake')updateMatchmakingUi('error',{mode:first.mode,message:m.m});
    errEl.textContent=m.m;
    if(joiningSocialInviteId&&(!m.inviteId||m.inviteId===joiningSocialInviteId)){finishSocialInviteJoin(false,roomCode,m.m);toast(`INVITE FAILED • ${m.m}`)}
    if(isReconnect){if(/no longer available|session is no longer|match is no longer/i.test(m.m)){clearRecoverySession();renderRecoveryPanel()}else if(/already connected/i.test(m.m)){setTimeout(()=>{const cur=readRecovery();if(cur&&!ws?.sessionToken)connect({t:'reconnect',code:cur.code,session:cur.session})},1200)}}
@@ -1004,7 +1006,7 @@ function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try
    if(sp0){maxhp=sp0.mh||maxhp;protEnd=performance.now()+(sp0.pr||0);const nh=sp0.hp;shields=sp0.sh===undefined?shields:sp0.sh;shieldUntil=performance.now()+(sp0.su||0);if(nh<hp){const hitAmount=hp-nh;tone(180,.2,'sawtooth',.18,70);vibrateOnHit(hitAmount)}hp=nh;if(sp0.alive===false)alive=false;myColor=sp0.c||myColor}}
    for(const id in m.players){if(id==myId)continue;const s=m.players[id];let r=remotes[id];
     if(!r){r={mesh:makePlane(s.c||TC[s.team],s.ty)};r.mesh.position.fromArray(s.p);remotes[id]=r}
-    const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
+    const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.ai=s.ai===true;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
     if(!wasAlive&&s.alive===true){r.mesh.position.fromArray(s.p);r.mesh.quaternion.fromArray(s.q);r.mesh.visible=true}}
    for(const id in remotes)if(!m.players[id]){scene.remove(remotes[id].mesh);delete remotes[id]}
    if(spectatorMode){const liveIds=Object.keys(remotes).filter(id=>remotes[id]&&remotes[id].alive!==false);if(!liveIds.length){specId=null}else if(!specId||!remotes[specId]||remotes[specId].alive===false){specId=liveIds[((specIdx%liveIds.length)+liveIds.length)%liveIds.length];}updateSpectatorHud();}}
@@ -1129,7 +1131,71 @@ document.getElementById('friendsToggle')?.addEventListener('click',()=>setFriend
 try{const savedSidebar=localStorage.getItem('maydayFriendsSidebarOpen');setFriendsSidebarOpen(savedSidebar===null?true:savedSidebar==='1',false)}catch{setFriendsSidebarOpen(true,false)}
 
 let selectedMode='';
-const MODE_META={ffa:{name:'DOGFIGHT',help:'Everyone against everyone · minimum 2 pilots · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'2–6 teams inside the room · minimum 2 pilots · one life per round · last team alive wins the round · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Everyone fights everyone · minimum 2 pilots · host chooses 1–5 lives · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
+let matchmakingActive=false,matchmakingMode='';
+function updateMatchmakingUi(state='idle',data={}){
+  const panel=document.getElementById('matchmakingPanel'),status=document.getElementById('matchmakingStatus');
+  const quick=document.getElementById('quickMatch'),cancel=document.getElementById('cancelMatchmaking');
+  const friend=document.getElementById('hostMode'),join=document.getElementById('joinMode');
+  const mode=data.mode||matchmakingMode||selectedMode;
+  if(data.mode)matchmakingMode=data.mode;
+  const onlineMode=['ffa','clash','survivor'].includes(mode);
+  if(state==='idle'){
+    matchmakingActive=false;
+    if(panel)panel.style.display='none';
+    if(cancel)cancel.style.display='none';
+    if(quick)quick.style.display=onlineMode?'inline-block':'none';
+    if(friend)friend.style.display=onlineMode?'inline-block':'none';
+    if(join)join.style.display=onlineMode?'inline-block':'none';
+    return;
+  }
+  if(panel)panel.style.display='block';
+  if(state==='connecting'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
+    matchmakingActive=true;
+    if(status)status.textContent='Connecting to MAYDAY matchmaking…';
+    if(quick)quick.style.display='none';
+    if(cancel)cancel.style.display='inline-block';
+    return;
+  }
+  if(state==='searching'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
+    matchmakingActive=true;
+    const count=Number(data.players)||0,target=Number(data.target)||0,waited=Number(data.waitedSeconds)||0;
+    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'AI pilots will fill empty slots if the queue stays quiet.':'Real pilots get priority; AI pilots fill empty slots after the queue wait.');
+    if(quick)quick.style.display='none';
+    if(cancel)cancel.style.display='inline-block';
+    return;
+  }
+  if(state==='matched'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
+    matchmakingActive=false;
+    if(status)status.textContent='Match found! Joining room '+(data.roomCode||'')+'…';
+    if(quick)quick.style.display='none';
+    if(cancel)cancel.style.display='none';
+    return;
+  }
+  matchmakingActive=false;
+  if(status)status.textContent=data.message||(state==='cancelled'?'Matchmaking search cancelled.':state==='replaced'?'Your previous matchmaking search was replaced.':'Could not start matchmaking. Please try again.');
+  if(quick)quick.style.display=onlineMode?'inline-block':'none';
+  if(friend)friend.style.display=onlineMode?'inline-block':'none';
+  if(join)join.style.display=onlineMode?'inline-block':'none';
+  if(cancel)cancel.style.display='none';
+}
+function cancelMatchmaking(){
+  pendingRoomConnect=null;
+  const socket=ws;
+  if(socket&&socket!==socialSocket){
+    if(socket.readyState===WebSocket.OPEN){try{socket.send(JSON.stringify({t:'matchmakeCancel',mode:matchmakingMode}))}catch(e){}}
+    ws=null;
+    try{socket.close(1000,'matchmaking cancelled')}catch(e){}
+  }
+  const err=document.getElementById('err');if(err)err.textContent='';
+  updateMatchmakingUi('cancelled',{mode:matchmakingMode,message:'Search cancelled. Choose PLAY ONLINE to search again.'});
+}
+const MODE_META={ffa:{name:'DOGFIGHT',help:'Quick match fills empty slots with server-controlled AI pilots when the queue is quiet · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'Quick match fills empty slots with AI pilots when the queue is quiet · one life per round · last team alive wins · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Quick match fills empty slots with AI pilots when the queue is quiet · host chooses 1–5 lives in private rooms · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
 function renderMatchResults(m){
  const modeName=m.mode==='clash'?'CLASH SQUAD':m.mode==='survivor'?'SURVIVOR':'DOGFIGHT';
  const players=(m.players||[]).slice();
@@ -1154,9 +1220,11 @@ function startPractice(){
   plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();shields=0;shieldUntil=0;RANGE=4000;reset();makePracticeArena();
   document.getElementById('lobby').style.display='none';showGameplayUi();document.getElementById('radar').style.display='block';winEl.style.display='none';bannerEl.textContent='';shieldHud.style.display='none';spectatorHud.style.display='none';setMusic(false);toast(`PRACTICE ARENA • ${practiceDifficulty.toUpperCase()} BOTS • ESC OR EXIT TO MAIN MENU`);
 }
-function resetModeSelection(){selectedMode='';document.querySelectorAll('.modeCard').forEach(c=>c.classList.remove('selected'));document.querySelector('.modeGrid').style.display='grid';document.getElementById('selectedModePanel').style.display='none';document.getElementById('actionRow').style.display='none';document.getElementById('hostMode').style.display='inline-block';document.getElementById('joinMode').style.display='inline-block';document.getElementById('practiceMode').style.display='none';document.getElementById('challengeMode').style.display='none';document.getElementById('practiceSettings').style.display='none';document.getElementById('joinBox').style.display='none';document.getElementById('modeHelp').textContent='Select a mode to continue.';document.getElementById('code').value='';errEl.textContent=''}document.querySelectorAll('.modeCard').forEach(card=>card.onclick=()=>{selectedMode=card.dataset.mode;document.querySelectorAll('.modeCard').forEach(c=>c.classList.toggle('selected',c===card));const info=MODE_META[selectedMode];document.querySelector('.modeGrid').style.display='none';document.getElementById('selectedModePanel').style.display='block';document.getElementById('selectedModeTitle').textContent=info.name;document.getElementById('selectedModeMeta').textContent=info.help;document.getElementById('practiceSettings').style.display=selectedMode==='practice'?'block':'none';document.getElementById('actionRow').style.display='flex';const localMode=selectedMode==='practice'||selectedMode==='challenge';document.getElementById('hostMode').style.display=localMode?'none':'inline-block';document.getElementById('joinMode').style.display=localMode?'none':'inline-block';document.getElementById('practiceMode').style.display=selectedMode==='practice'?'inline-block':'none';document.getElementById('challengeMode').style.display=selectedMode==='challenge'?'inline-block':'none';document.getElementById('joinBox').style.display='none';errEl.textContent='';document.getElementById('modeHelp').textContent=info.help});
-document.getElementById('backToModes').onclick=()=>resetModeSelection();
-document.getElementById('hostMode').onclick=()=>{if(!selectedMode)return;document.getElementById('joinBox').style.display='none';errEl.textContent='';connect({t:'host',mode:selectedMode})};
+function resetModeSelection(){selectedMode='';matchmakingMode='';matchmakingActive=false;updateMatchmakingUi('idle',{});document.querySelectorAll('.modeCard').forEach(c=>c.classList.remove('selected'));document.querySelector('.modeGrid').style.display='grid';document.getElementById('selectedModePanel').style.display='none';document.getElementById('actionRow').style.display='none';document.getElementById('hostMode').style.display='inline-block';document.getElementById('joinMode').style.display='inline-block';document.getElementById('practiceMode').style.display='none';document.getElementById('challengeMode').style.display='none';document.getElementById('practiceSettings').style.display='none';document.getElementById('joinBox').style.display='none';document.getElementById('modeHelp').textContent='Select a mode to continue.';document.getElementById('code').value='';errEl.textContent=''}document.querySelectorAll('.modeCard').forEach(card=>card.onclick=()=>{selectedMode=card.dataset.mode;document.querySelectorAll('.modeCard').forEach(c=>c.classList.toggle('selected',c===card));const info=MODE_META[selectedMode];document.querySelector('.modeGrid').style.display='none';document.getElementById('selectedModePanel').style.display='block';document.getElementById('selectedModeTitle').textContent=info.name;document.getElementById('selectedModeMeta').textContent=info.help;document.getElementById('practiceSettings').style.display=selectedMode==='practice'?'block':'none';document.getElementById('actionRow').style.display='flex';const localMode=selectedMode==='practice'||selectedMode==='challenge';matchmakingMode=selectedMode;updateMatchmakingUi('idle',{mode:selectedMode});document.getElementById('hostMode').textContent='PLAY WITH FRIENDS';document.getElementById('joinMode').textContent='JOIN PRIVATE ROOM';document.getElementById('hostMode').style.display=localMode?'none':'inline-block';document.getElementById('joinMode').style.display=localMode?'none':'inline-block';document.getElementById('quickMatch').style.display=localMode?'none':'inline-block';document.getElementById('practiceMode').style.display=selectedMode==='practice'?'inline-block':'none';document.getElementById('challengeMode').style.display=selectedMode==='challenge'?'inline-block':'none';document.getElementById('joinBox').style.display='none';errEl.textContent='';document.getElementById('modeHelp').textContent=info.help});
+document.getElementById('backToModes').onclick=()=>{if(matchmakingActive)cancelMatchmaking();resetModeSelection()};
+document.getElementById('hostMode').onclick=()=>{if(!selectedMode)return;if(matchmakingActive)cancelMatchmaking();document.getElementById('joinBox').style.display='none';errEl.textContent='';connect({t:'host',mode:selectedMode})};
+document.getElementById('quickMatch').onclick=()=>{if(!['ffa','clash','survivor'].includes(selectedMode))return;matchmakingMode=selectedMode;errEl.textContent='';updateMatchmakingUi('connecting',{mode:selectedMode});connect({t:'matchmake',mode:selectedMode})};
+document.getElementById('cancelMatchmaking').onclick=cancelMatchmaking;
 document.getElementById('practiceMode').onclick=()=>{if(selectedMode==='practice')startPractice()};
 document.getElementById('challengeMode').onclick=()=>{if(selectedMode==='challenge')startFlightChallenge()};
 document.getElementById('joinMode').onclick=()=>{document.getElementById('joinBox').style.display='block';document.getElementById('code').focus();errEl.textContent=''};
