@@ -4,7 +4,7 @@
 <meta name="google-adsense-account" content="ca-pub-9150365943921533">
 <style>
 html,body{margin:0;height:100%;background:#0b1730;overflow:hidden;font-family:system-ui,sans-serif}
-canvas{display:block;width:100%;height:100%}
+canvas{display:block;width:100%;height:100%}body>canvas:not(#radar){position:fixed;inset:0;z-index:0;pointer-events:none}
 #hud{z-index:4;position:fixed;left:18px;bottom:18px;min-width:190px;padding:10px 14px;color:#fff;font:600 14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 1px 3px #000;pointer-events:none;background:linear-gradient(180deg,rgba(8,18,35,.16),rgba(8,18,35,.62));border-left:2px solid rgba(130,220,255,.75);border-radius:0 9px 9px 0;backdrop-filter:blur(3px)}
 #landingHint{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:4;display:none;min-width:300px;max-width:86vw;padding:9px 14px;border:1px solid rgba(80,255,150,.42);border-radius:11px;background:rgba(4,18,12,.72);color:#d9ffe8;font:800 13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center;text-shadow:0 1px 4px #000;box-shadow:0 8px 24px rgba(0,0,0,.2);pointer-events:none;backdrop-filter:blur(5px)}
 #score{z-index:4;position:fixed;right:18px;top:18px;min-width:205px;padding:10px 14px;color:#fff;font:600 13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;text-shadow:0 1px 3px #000;pointer-events:none;text-align:right;background:linear-gradient(180deg,rgba(8,18,35,.5),rgba(8,18,35,.22));border-right:2px solid rgba(255,255,255,.45);border-radius:9px 0 0 9px;backdrop-filter:blur(3px)}
@@ -37,7 +37,7 @@ canvas{display:block;width:100%;height:100%}
 @keyframes killPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.68)}22%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}42%{transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.02) translateY(-12px)}}
 #cross:before,#cross:after{content:'';position:absolute;background:rgba(255,255,255,.7);left:50%;top:50%;transform:translate(-50%,-50%)}#cross:before{width:30px;height:1px}#cross:after{width:1px;height:30px}
 #vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 44%,transparent 54%,rgba(0,7,18,.08) 100%)}
-#lobby{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(45,91,135,.48),rgba(5,14,28,.9) 68%),linear-gradient(180deg,rgba(7,18,34,.35),rgba(3,7,15,.86));color:#fff;text-align:center;padding:20px;backdrop-filter:blur(2px)}
+#lobby{position:fixed;inset:0;z-index:10;isolation:isolate;display:flex;flex-direction:column;align-items:center;justify-content:center;background-color:#071322;background-image:radial-gradient(circle at 50% 35%,rgba(45,91,135,.48),rgba(5,14,28,.9) 68%),linear-gradient(180deg,rgba(7,18,34,.35),rgba(3,7,15,.86));color:#fff;text-align:center;padding:20px;backdrop-filter:none}
 #lobby h1{margin:0 0 12px;font-size:clamp(2rem,5vw,4rem);letter-spacing:.06em;text-shadow:0 5px 24px rgba(0,0,0,.42)} #lobby p{margin:5px 0;opacity:.9}
 #lobby input[type=text],#lobby select{padding:10px;font-size:1rem;border-radius:8px;border:1px solid rgba(255,255,255,.12);text-align:center;margin:8px;background:rgba(255,255,255,.94);color:#142033}
 #lobby input[type=color]{width:60px;height:40px;border:0;vertical-align:middle;background:none}
@@ -77,8 +77,8 @@ button{margin-top:16px;padding:12px 28px;font-size:1.05rem;border:1px solid rgba
 #spectatorHud{position:fixed;left:50%;top:72px;transform:translateX(-50%);z-index:5;color:#fff;font:900 14px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-shadow:0 2px 7px #000;background:rgba(3,10,18,.45);border:1px solid rgba(255,255,255,.12);padding:7px 12px;border-radius:999px;display:none;pointer-events:none}
 #radar{display:none}
 #roomCodeHud{position:fixed;left:16px;top:74px;z-index:6;color:#d9f5ff;font:900 13px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-shadow:0 2px 6px #000;background:rgba(4,14,25,.58);border:1px solid rgba(125,224,255,.2);padding:7px 10px;border-radius:9px;pointer-events:none;display:none;backdrop-filter:blur(4px)}
-#gameSettingsBtn{position:fixed;left:270px;top:16px;right:auto;z-index:16;display:none;min-width:116px;padding:9px 14px;font-size:.9rem;background:rgba(8,18,35,.72);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:blur(4px)}
-#exitPracticeBtn{position:fixed;left:430px;top:16px;z-index:16;display:none;min-width:96px;padding:9px 14px;font-size:.9rem;background:rgba(115,32,32,.88);color:#fff;border:1px solid rgba(255,170,170,.35);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:blur(4px)}
+#gameSettingsBtn{position:fixed;left:270px;top:16px;right:auto;z-index:16;display:none;min-width:116px;padding:9px 14px;font-size:.9rem;background:linear-gradient(180deg,#18334b,#0b1c30);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:none}
+#exitPracticeBtn{position:fixed;left:430px;top:16px;z-index:16;display:none;min-width:96px;padding:9px 14px;font-size:.9rem;background:linear-gradient(180deg,#8b2929,#641b1b);color:#fff;border:1px solid rgba(255,170,170,.35);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:none}
 @media(max-width:760px){#gameSettingsBtn{left:16px;top:112px}#exitPracticeBtn{left:174px;top:112px}}
 body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
 
