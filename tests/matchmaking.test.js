@@ -8,7 +8,7 @@ const net = require('node:net');
 const WebSocket = require('ws');
 
 const root = path.resolve(__dirname, '..');
-const pilotFirstNames = new Set(require(path.join(root, 'pilot-names.json')).map(name => String(name || '').trim().split(/\s+/)[0]));
+const pilotFirstNames = new Set(require(path.join(root, 'pilot-names.json')).map(name => String(name || '').trim().split(/\s+/)[0].slice(0, 14)));
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -317,6 +317,76 @@ test('pilots who join the same queue three seconds apart enter the same match if
     fs.rmSync(dataDir, {recursive:true, force:true});
     if (child.exitCode !== 0 && child.exitCode !== null) {
       assert.fail('MAYDAY server failed during delayed queue test. Logs: ' + getOutput());
+    }
+  }
+});
+
+test('staggered pilots are backfilled into the same live match instead of being split', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-backfill-queue-'));
+  const {child, getOutput} = await startServer(port, dataDir, 7000);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    const seed = await connect();
+    seed.send({t:'matchmake', mode:'ffa', n:'Seed Pilot', ty:'balanced'});
+    const seedMatched = await seed.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
+    const seedRoom = await seed.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+    assert.equal(seedRoom.players.length, 8);
+    assert.equal(seedMatched.aiPlayers, 7);
+
+    const first = await connect();
+    first.send({t:'matchmake', mode:'ffa', n:'Vardhan', ty:'balanced'});
+    await first.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa' && m.players===1);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const second = await connect();
+    second.send({t:'matchmake', mode:'ffa', n:'Anika', ty:'fighter'});
+    await second.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa' && m.players===2);
+
+    // The older entry reaches its backfill threshold first, but the newer entry
+    // has not reached it yet. Neither should be split away into a separate room.
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(first.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
+    assert.equal(second.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
+
+    const [matchedFirst, matchedSecond] = await Promise.all([
+      first.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa'),
+      second.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa')
+    ]);
+    assert.equal(matchedFirst.backfill, true);
+    assert.equal(matchedSecond.backfill, true);
+    assert.equal(matchedFirst.roomCode, seedRoom.code);
+    assert.equal(matchedSecond.roomCode, seedRoom.code);
+    assert.equal(matchedFirst.aiPlayers, 5);
+
+    const firstRoom = await first.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+    const secondRoom = await second.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+    assert.equal(firstRoom.code, secondRoom.code);
+    assert.deepEqual(firstRoom.players.filter(p => !p.ai).map(p => p.n).sort(), ['Anika','Seed Pilot','Vardhan']);
+
+    for (const client of [first,second,seed]) client.send({t:'leave'});
+    await Promise.all([first,second,seed].map(client => client.waitFor(m => m.t==='left' && m.ok===true)));
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY backfill queue test failed. Logs: ' + getOutput());
     }
   }
 });
