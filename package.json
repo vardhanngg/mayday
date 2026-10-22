@@ -1,6 +1,6 @@
 {
   "name": "flight-battle",
-  "version": "74.0.0",
+  "version": "75.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,5 +13,5 @@
   "engines": {
     "node": ">=20"
   },
-  "description": "MAYDAY browser-based 3D aircraft game"
+  "description": "MAYDAY browser-based 3D aircraft game with a standalone five-mode portal build"
 }
