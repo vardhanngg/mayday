@@ -1056,7 +1056,7 @@ function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try
   else if(m.t==='snap'){snapPlayers=m.players;score=m.score;roundNo=m.round;if(spectatorMode){alive=false;over=m.state==='between';if(roomMode==='clash'){const hidden=Math.max(...Object.values(snapPlayers).map(s=>s.rh||0),0);roundHiddenUntil=Math.max(roundHiddenUntil,performance.now()+hidden)} }else{const firstStealth=(m.players[myId]?.rh||0);if(roomMode==='clash'&&firstStealth)roundHiddenUntil=Math.max(roundHiddenUntil,performance.now()+firstStealth);const sp0=snapPlayers[myId];
    if(sp0){maxhp=sp0.mh||maxhp;protEnd=performance.now()+(sp0.pr||0);const nh=sp0.hp;shields=sp0.sh===undefined?shields:sp0.sh;shieldUntil=performance.now()+(sp0.su||0);if(nh<hp){const hitAmount=hp-nh;tone(180,.2,'sawtooth',.18,70);vibrateOnHit(hitAmount)}hp=nh;if(sp0.alive===false)alive=false;myColor=sp0.c||myColor}}
    for(const id in m.players){if(id==myId)continue;const s=m.players[id];let r=remotes[id];
-    if(!r){r={mesh:makePlane(s.c||TC[s.team],s.ty)};r.mesh.position.fromArray(s.p);remotes[id]=r}
+    if(!r){r={mesh:makePlane((COLOR_BY_ID[s.colorId]?.color)||s.c||TC[s.team],s.ty)};r.mesh.position.fromArray(s.p);remotes[id]=r}
     const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.ai=s.ai===true;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
     if(!wasAlive&&s.alive===true){r.mesh.position.fromArray(s.p);r.mesh.quaternion.fromArray(s.q);r.mesh.visible=true}}
    for(const id in remotes)if(!m.players[id]){scene.remove(remotes[id].mesh);delete remotes[id]}
