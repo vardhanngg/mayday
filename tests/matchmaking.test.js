@@ -326,7 +326,7 @@ test('pilots who join the same queue three seconds apart enter the same match if
 test('staggered pilots are backfilled into the same live match instead of being split', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-backfill-queue-'));
-  const {child, getOutput} = await startServer(port, dataDir, 7000);
+  const {child, getOutput} = await startServer(port, dataDir, 12000);
   const clients = [];
   const url = 'ws://127.0.0.1:' + port;
   const connect = async () => {
@@ -339,7 +339,7 @@ test('staggered pilots are backfilled into the same live match instead of being 
   try {
     const seed = await connect();
     seed.send({t:'matchmake', mode:'ffa', n:'Seed Pilot', ty:'balanced'});
-    const seedMatched = await seed.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa', 11000);
+    const seedMatched = await seed.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa', 17000);
     const seedRoom = await seed.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
     assert.equal(seedRoom.players.length, 8);
     assert.equal(seedMatched.aiPlayers, 7);
@@ -356,6 +356,9 @@ test('staggered pilots are backfilled into the same live match instead of being 
     await new Promise(resolve => setTimeout(resolve, 1100));
     assert.equal(first.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
     assert.equal(second.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
+    // Wait for the second entrant to cross the 5-second backfill threshold while
+    // the older queue entry remains below its 12-second normal match timeout.
+    await new Promise(resolve => setTimeout(resolve, 4200));
 
     const [matchedFirst, matchedSecond] = await Promise.all([
       first.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa'),
