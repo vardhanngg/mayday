@@ -1135,6 +1135,7 @@ let matchmakingActive=false,matchmakingMode='';
 function updateMatchmakingUi(state='idle',data={}){
   const panel=document.getElementById('matchmakingPanel'),status=document.getElementById('matchmakingStatus');
   const quick=document.getElementById('quickMatch'),cancel=document.getElementById('cancelMatchmaking');
+  const friend=document.getElementById('hostMode'),join=document.getElementById('joinMode');
   const mode=data.mode||matchmakingMode||selectedMode;
   if(data.mode)matchmakingMode=data.mode;
   const onlineMode=['ffa','clash','survivor'].includes(mode);
@@ -1143,10 +1144,14 @@ function updateMatchmakingUi(state='idle',data={}){
     if(panel)panel.style.display='none';
     if(cancel)cancel.style.display='none';
     if(quick)quick.style.display=onlineMode?'inline-block':'none';
+    if(friend)friend.style.display=onlineMode?'inline-block':'none';
+    if(join)join.style.display=onlineMode?'inline-block':'none';
     return;
   }
   if(panel)panel.style.display='block';
   if(state==='connecting'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
     matchmakingActive=true;
     if(status)status.textContent='Connecting to MAYDAY matchmaking…';
     if(quick)quick.style.display='none';
@@ -1154,6 +1159,8 @@ function updateMatchmakingUi(state='idle',data={}){
     return;
   }
   if(state==='searching'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
     matchmakingActive=true;
     const count=Number(data.players)||0,target=Number(data.target)||0,waited=Number(data.waitedSeconds)||0;
     if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'A smaller match will start soon if the queue stays quiet.':'We’ll start a smaller match if the queue is quiet.');
@@ -1162,6 +1169,8 @@ function updateMatchmakingUi(state='idle',data={}){
     return;
   }
   if(state==='matched'){
+    if(friend)friend.style.display='none';
+    if(join)join.style.display='none';
     matchmakingActive=false;
     if(status)status.textContent='Match found! Joining room '+(data.roomCode||'')+'…';
     if(quick)quick.style.display='none';
@@ -1171,6 +1180,8 @@ function updateMatchmakingUi(state='idle',data={}){
   matchmakingActive=false;
   if(status)status.textContent=data.message||(state==='cancelled'?'Matchmaking search cancelled.':state==='replaced'?'Your previous matchmaking search was replaced.':'Could not start matchmaking. Please try again.');
   if(quick)quick.style.display=onlineMode?'inline-block':'none';
+  if(friend)friend.style.display=onlineMode?'inline-block':'none';
+  if(join)join.style.display=onlineMode?'inline-block':'none';
   if(cancel)cancel.style.display='none';
 }
 function cancelMatchmaking(){
