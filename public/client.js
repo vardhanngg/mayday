@@ -521,7 +521,9 @@ function updatePracticeBots(now,dt){
 }
 function i18nBotName(id){return 'DRONE '+String(id).split('-')[1]}
 const FLIGHT_CHALLENGE_LEVELS=[{name:'ARCH ENTRY',gates:[0],targets:[0]},{name:'CITY SLALOM',gates:[1,2],targets:[1]},{name:'RIDGE RUN',gates:[3],targets:[2]},{name:'TOWER STRIKE',gates:[4,5],targets:[3]},{name:'FINAL GAUNTLET',gates:[6],targets:[4]}];
-const flightChallenge={objects:[],solids:[],gates:[],targets:[],nextGate:0,targetsDestroyed:0,currentLevel:0,startTime:0,finished:false,lastGateMiss:0,score:0,streak:0,bestStreak:0,lastHitAt:0,medal:''};
+const flightChallenge={objects:[],solids:[],gates:[],targets:[],nextGate:0,targetsDestroyed:0,currentLevel:0,startTime:0,finished:false,lastGateMiss:0,score:0,highScore:0,streak:0,bestStreak:0,lastHitAt:0,laps:1,medal:''};
+function loadFlightChallengeHighScore(){try{flightChallenge.highScore=Math.max(0,Number(localStorage.getItem('maydayFlightChallengeHighScore'))||0)}catch(_){flightChallenge.highScore=0}}
+function saveFlightChallengeHighScore(){if(flightChallenge.score>flightChallenge.highScore){flightChallenge.highScore=flightChallenge.score;try{localStorage.setItem('maydayFlightChallengeHighScore',String(flightChallenge.highScore))}catch(_){}}}
 function clearFlightChallenge(){
   const geometrySet=new Set(),materialSet=new Set();
   for(const root of flightChallenge.objects||[]){
@@ -555,7 +557,7 @@ function addChallengeBuilding(x,z,w,h,d,shade=0x405f79){
 }
 function createFlightChallengeCourse(){
   clearFlightChallenge();
-  flightChallenge.startTime=performance.now();
+  flightChallenge.startTime=performance.now();loadFlightChallengeHighScore();
   const gateSpecs=[
     {x:0,z:-1500,alt:560},
     {x:520,z:-2850,alt:500},
@@ -616,7 +618,7 @@ function challengeTargetHit(id){
   if(!challengeMode||!target||!target.active||target.level!==flightChallenge.currentLevel)return;
   target.active=false;target.root.visible=false;flightChallenge.targetsDestroyed++;
   const now=performance.now();flightChallenge.streak=now-flightChallenge.lastHitAt<10000?flightChallenge.streak+1:1;flightChallenge.lastHitAt=now;flightChallenge.bestStreak=Math.max(flightChallenge.bestStreak,flightChallenge.streak);
-  const bonus=flightChallenge.streak>1?(flightChallenge.streak-1)*100:0;flightChallenge.score+=250+bonus;
+  const bonus=flightChallenge.streak>1?(flightChallenge.streak-1)*100:0;flightChallenge.score+=250+bonus;saveFlightChallengeHighScore();
   toast('BOARD DESTROYED • +'+(250+bonus)+' POINTS'+(flightChallenge.streak>1?' • '+flightChallenge.streak+' HIT STREAK!':''));
 }
 function syncFlightChallengeLevel(){
@@ -625,7 +627,7 @@ function syncFlightChallengeLevel(){
   for(const target of flightChallenge.targets)target.root.visible=target.level===flightChallenge.currentLevel&&target.active;
 }
 function restartFlightChallengeRun(){
-  flightChallenge.currentLevel=0;flightChallenge.nextGate=0;flightChallenge.targetsDestroyed=0;flightChallenge.finished=false;flightChallenge.startTime=performance.now();flightChallenge.score=0;flightChallenge.streak=0;flightChallenge.bestStreak=0;flightChallenge.lastHitAt=0;flightChallenge.medal='';
+  flightChallenge.currentLevel=0;flightChallenge.nextGate=0;flightChallenge.targetsDestroyed=0;flightChallenge.finished=false;flightChallenge.startTime=performance.now();flightChallenge.score=0;flightChallenge.streak=0;flightChallenge.bestStreak=0;flightChallenge.lastHitAt=0;flightChallenge.laps=1;flightChallenge.medal='';loadFlightChallengeHighScore();
   for(const gate of flightChallenge.gates){gate.passed=false;gate.ring.material.color.setHex(gate.level===0?0x8cffb0:0x39dff2);gate.ring.material.emissive.setHex(gate.level===0?0x13572a:0x06404e)}
   
   for(const target of flightChallenge.targets)target.active=true;
@@ -657,14 +659,14 @@ function updateFlightChallenge(px,py,pz,now){
       const at=from.clone().lerp(to,t);
       if(Math.hypot(at.x,at.y)<=gate.aperture){
         gate.passed=true;gate.ring.material.color.setHex(0x80ff9c);gate.ring.material.emissive.setHex(0x13572a);
-        flightChallenge.nextGate++;flightChallenge.score+=100;tone(920,.12,'sine',.08);toast('RING CLEARED • +100 POINTS • '+flightChallenge.nextGate+'/'+flightChallenge.gates.length);
+        flightChallenge.nextGate++;flightChallenge.score+=100;saveFlightChallengeHighScore();tone(920,.12,'sine',.08);toast('RING CLEARED • +100 POINTS • '+flightChallenge.nextGate+'/'+flightChallenge.gates.length);
       }else if(now-(flightChallenge.lastGateMiss||0)>1400){flightChallenge.lastGateMiss=now;toast('CHECKPOINT MISSED • LINE UP THROUGH THE ARCH')}
     }
   }
   const gatesDone=level.gates.every(i=>flightChallenge.gates[i]?.passed),targetsDone=level.targets.every(i=>!flightChallenge.targets[i]?.active);
   if(gatesDone&&targetsDone){
     if(flightChallenge.currentLevel<FLIGHT_CHALLENGE_LEVELS.length-1){flightChallenge.currentLevel++;syncFlightChallengeLevel();const next=FLIGHT_CHALLENGE_LEVELS[flightChallenge.currentLevel];toast('LEVEL '+(flightChallenge.currentLevel+1)+' UNLOCKED • '+next.name)}
-    else{flightChallenge.finished=true;const elapsed=(now-flightChallenge.startTime)/1000;flightChallenge.medal=elapsed<150?'GOLD MEDAL':elapsed<240?'SILVER MEDAL':'BRONZE MEDAL';flightChallenge.score+=elapsed<150?1000:elapsed<240?500:0;toast('CHALLENGE COMPLETE • '+flightChallenge.medal+' • FINAL SCORE '+flightChallenge.score);}
+    else{const elapsed=(now-flightChallenge.startTime)/1000;const medal=elapsed<150?'GOLD':elapsed<240?'SILVER':'BRONZE';flightChallenge.score+=elapsed<150?1000:elapsed<240?500:0;flightChallenge.laps++;flightChallenge.currentLevel=0;flightChallenge.nextGate=0;for(const g of flightChallenge.gates){g.passed=false;g.ring.material.color.setHex(g.level===0?0x8cffb0:0x39dff2);g.ring.material.emissive.setHex(g.level===0?0x13572a:0x06404e)}for(const t of flightChallenge.targets)t.active=true;saveFlightChallengeHighScore();syncFlightChallengeLevel();toast('LAP COMPLETE • '+medal+' TIME • LAP '+flightChallenge.laps+' STARTED • SCORE '+flightChallenge.score);}
   }
 }
 function flightChallengeHudText(){
@@ -674,10 +676,10 @@ function flightChallengeHudText(){
   const next=flightChallenge.gates[flightChallenge.nextGate],levelGatesDone=level.gates.filter(i=>flightChallenge.gates[i]?.passed).length;
   const levelTargetsDone=level.targets.filter(i=>!flightChallenge.targets[i]?.active).length;
   const distance=next&&plane?Math.round(plane.position.distanceTo(next.position))+' m':'—';
-  const status=flightChallenge.finished?'COURSE COMPLETE · '+flightChallenge.medal:next?'NEXT RING · '+distance:'LEVEL OBJECTIVES';
-  return '<b>FLIGHT CHALLENGE · LEVEL '+Math.min(5,flightChallenge.currentLevel+1)+'/5</b><br>'+level.name+'<br>RINGS: '+levelGatesDone+'/'+level.gates.length+
-    '<br>BOARDS: '+levelTargetsDone+'/'+level.targets.length+'<br><b>SCORE: '+flightChallenge.score+'</b> · HIT STREAK: '+flightChallenge.streak+
-    '<br>RUN TOTALS: '+flightChallenge.nextGate+'/7 RINGS · '+flightChallenge.targetsDestroyed+'/5 BOARDS'+
+  const status=next?'NEXT RING · '+distance:'LEVEL OBJECTIVES';
+  return '<b>ENDLESS FLIGHT CHALLENGE · LAP '+flightChallenge.laps+'</b><br>LEVEL '+(flightChallenge.currentLevel+1)+'/5 · '+level.name+'<br>RINGS: '+levelGatesDone+'/'+level.gates.length+
+    '<br>BOARDS: '+levelTargetsDone+'/'+level.targets.length+'<br><b>SCORE: '+flightChallenge.score+'</b> · BEST: '+flightChallenge.highScore+'<br>HIT STREAK: '+flightChallenge.streak+' · BEST STREAK: '+flightChallenge.bestStreak+
+    '<br>RUN TOTALS: '+flightChallenge.nextGate+'/7 RINGS · '+flightChallenge.targetsDestroyed+' BOARDS'+
     '<br>TIME: '+time+'<br><small>'+status+' · F = FIRE MISSILE · CRASH RESTARTS RUN · ESC = EXIT</small>';
 }
 function startFlightChallenge(){
