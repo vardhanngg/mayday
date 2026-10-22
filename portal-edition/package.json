@@ -1,0 +1,15 @@
+{
+  "name": "mayday-portal-edition",
+  "version": "74.0.0",
+  "private": true,
+  "description": "Standalone, portal-ready Flight Challenge build for MAYDAY",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "three": "0.128.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
