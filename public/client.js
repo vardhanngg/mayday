@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v73.0-responsive-lobby-fit';
+const MAYDAY_BUILD='v74.0-challenge-radar-engine-audio';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -215,9 +215,9 @@ let shieldMesh=null;
 function ensureShield(){if(!plane)return;shieldMesh=plane.userData.shield||null}
 function updateShieldVisual(){ensureShield();if(shieldMesh){shieldMesh.visible=roomMode==='clash'&&alive&&shieldUntil>performance.now();if(shieldMesh.visible){const pulse=.95+.08*Math.sin(performance.now()*.02);shieldMesh.scale.setScalar(pulse)}}}
 function updateSpectatorHud(){if(!inGame||alive||(!spectatorMode&&roomMode!=='clash'&&roomMode!=='survivor')){spectatorHud.style.display='none';return}const r=specId&&remotes[specId],sp=specId&&snapPlayers[specId];spectatorHud.style.display='block';spectatorHud.textContent=r&&sp?`SPECTATING  ${sp.n}${r.team&&TN[r.team]?`  •  ${TN[r.team].toUpperCase()} TEAM`:''}  •  TAB NEXT`:(spectatorMode?'SPECTATING  •  waiting for a pilot':'SPECTATING  •  waiting for a survivor');}
-let AC=null,engOsc=null,musicGain=null,missileAudio=0,menuMusic=null,menuMusicReady=false,menuMusicPlaying=false,menuSfx={};
+let AC=null,engOsc=null,engineGain=null,missileAudio=0,menuMusic=null,menuMusicReady=false,menuMusicPlaying=false,menuSfx={};
 function initAudio(){if(!AC){AC=new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();
- engOsc=AC.createOscillator();engOsc.type='sawtooth';const eg=AC.createGain();eg.gain.value=.02;const ef=AC.createBiquadFilter();ef.type='lowpass';ef.frequency.value=360;engOsc.connect(ef);ef.connect(eg);eg.connect(AC.destination);engOsc.start();
+ engOsc=AC.createOscillator();engOsc.type='sawtooth';engineGain=AC.createGain();engineGain.gain.value=0;const ef=AC.createBiquadFilter();ef.type='lowpass';ef.frequency.value=360;engOsc.connect(ef);ef.connect(engineGain);engineGain.connect(AC.destination);engOsc.start();
  menuMusic=new Audio('/audio/mayday-entry.wav');menuMusic.loop=true;menuMusic.volume=.34;menuMusic.preload='auto';menuMusicReady=true;
  menuSfx.gun='/audio/gunshot.wav';menuSfx.launch='/audio/missile-launch.wav';menuSfx.explosion='/audio/explosion.wav';menuSfx.fire='/audio/fire-loop.wav';menuSfx.shield='/audio/shield.wav';menuSfx.missile='/audio/missile-loop.wav';}
  if(AC.state==='suspended')AC.resume()}
@@ -1207,6 +1207,29 @@ function drawRadar(now){const W=240,C=120,Rr=108;rc.clearRect(0,0,W,W);
   if(lockId&&lockId===id){const ok=lockT>=3;rc.strokeStyle=ok?'#ff2b2b':'#ffd400';rc.lineWidth=2;rc.beginPath();rc.arc(px,py,15+(ok?Math.sin(now/100)*2:0),0,7);rc.stroke()}
   const dist=Math.hypot(dx,dz,dy);rc.textAlign='left';rc.font='bold 11px monospace';rc.fillStyle='#fff';
   rc.fillText((dy>50?'\u25b2':dy<-50?'\u25bc':'\u25cf')+(dist>=1000?(dist/1000).toFixed(1)+'km':Math.round(dist/10)*10+'m'),px+13,py+1);rc.textAlign='center'}
+ if(challengeMode){
+  const plotChallengeMarker=(pos,color,radius=3,asRing=false)=>{
+   const dx=pos.x-plane.position.x,dz=pos.z-plane.position.z;
+   let [sx,sy]=toS(dx,dz);const d=Math.hypot(sx,sy),limit=Rr-17;
+   const k=Math.min(d/RANGE*Rr,limit)/(d||1);sx*=k;sy*=k;
+   const px=C+sx,py=C+sy;
+   rc.save();rc.globalAlpha=d>RANGE?.78:1;
+   if(asRing){
+    rc.strokeStyle='rgba(5,12,20,.9)';rc.lineWidth=5;rc.beginPath();rc.arc(px,py,radius+1,0,Math.PI*2);rc.stroke();
+    rc.strokeStyle=color;rc.lineWidth=2.8;rc.beginPath();rc.arc(px,py,radius,0,Math.PI*2);rc.stroke();
+    rc.fillStyle=color;rc.beginPath();rc.arc(px,py,2.3,0,Math.PI*2);rc.fill();
+   }else{
+    rc.fillStyle='rgba(4,12,20,.9)';rc.beginPath();rc.arc(px,py,radius+1.4,0,Math.PI*2);rc.fill();
+    rc.fillStyle=color;rc.beginPath();rc.arc(px,py,radius,0,Math.PI*2);rc.fill();
+   }
+   rc.restore();
+  };
+  const activeLevel=FLIGHT_CHALLENGE_LEVELS[flightChallenge.currentLevel];
+  const nextGate=activeLevel?.gates.map(i=>flightChallenge.gates[i]).find(g=>g&&!g.passed);
+  if(nextGate)plotChallengeMarker(nextGate.position,'#6dff9b',7,true);
+  for(const flag of flightChallenge.flags){if(flag.active)plotChallengeMarker(flag.position,'#ffd166',3.2,false)}
+  for(const target of flightChallenge.targets){if(target.active)plotChallengeMarker(target.center,'#ff5964',3.8,false)}
+ }
  for(const s of landingStrips){const dx=s.x-plane.position.x,dz=s.z-plane.position.z;let [sx,sy]=toS(dx,dz);const d=Math.hypot(sx,sy);if(d<=RANGE){const k=Math.min(d/RANGE*Rr,Rr-8)/(d||1);sx*=k;sy*=k;rc.fillStyle='#50ff9a';rc.fillRect(C+sx-3,C+sy-3,6,6)}}
  rc.save();rc.translate(C,C);if(mapStyle==='north')rc.rotate(Math.atan2(fw.x,-fw.z));rc.fillStyle=myColor;rc.strokeStyle='rgba(0,0,0,.85)';rc.lineWidth=1.5;rc.beginPath();rc.moveTo(0,-10);rc.lineTo(8,9);rc.lineTo(0,5);rc.lineTo(-8,9);rc.closePath();rc.fill();rc.stroke();rc.restore()}
 const clock=new T.Clock();updateTerrain(0,0);cam.position.set(0,600,0);
@@ -1352,7 +1375,7 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
   hud.innerHTML=`${roomMode==='clash'?`<span style="color:#79d8ff">🛡 SHIELDS ${shields}</span><br>`:''}<span style="opacity:.8">FLARES ${flares}</span><br>${roomMode==='survivor'?`<span style="color:${myColor}">♥ LIVES ${snapPlayers[myId]?.lives??1}</span><br>`:''}${landed?'<span style="color:#7dffb2">🛬 LANDED '+esc(landingStrip.name)+'</span><br>':''}HP ${'█'.repeat(Math.ceil(hp/maxhp*10))}${hp}<br>SPEED ${Math.round(speed*3.6)} km/h<br>ALT ${Math.round(plane.position.y)} m<br>THROTTLE ${Math.round(throttle*100)}%<br>BOOST ${'█'.repeat(Math.ceil(boost/10))} ${Math.round(boost)}<br>MISSILE ${mcd>0?mcd.toFixed(1)+'s':'READY'}${protEnd>now?'<br>PROTECTED '+((protEnd-now)/1000).toFixed(1)+'s':''}${alive?'':`<br>${spectatorMode?'SPECTATING MODE':'YOU ARE OUT — '+(roomMode==='clash'?'SPECTATING':'RESPAWNING')}`}`;updateShieldVisual();updateSpectatorHud();shieldHud.innerHTML=roomMode==='clash'?`🛡 SHIELDS ${'◈'.repeat(shields)}${shieldUntil>now?`<br><span style="color:#7de0ff">ACTIVE ${(Math.max(0,shieldUntil-now)/1000).toFixed(1)}s</span>`:`<br><span style="opacity:.7">Q = 7s shield</span>`}`:'';
 const mw=document.getElementById('missileWarning');if(mw){mw.style.display=(missileWarningUntil>now)?'block':'none';if(missileWarningUntil>now)mw.textContent='⚠ MISSILE INBOUND';}
   drawRadar(performance.now());
-  if(AC)engOsc.frequency.value=55+speed*.9;
+  if(AC){engOsc.frequency.value=55+speed*.9;if(engineGain)engineGain.gain.setTargetAtTime(inGame&&!!plane&&alive&&!killReplayActive?0.02:0,AC.currentTime,.06)}
   if(plane&&plane.userData.glow){const blink=.55+.45*Math.sin(now*.006);plane.userData.glow.left.material.opacity=.35+.45*blink;plane.userData.glow.right.material.opacity=.35+.45*blink;if(plane.userData.engGlow){const pulse=.72+.28*Math.sin(now*.012+speed*.01);plane.userData.engGlow[0].scale.y=.65+pulse*.7;plane.userData.engGlow[1].scale.y=.65+pulse*.7;plane.userData.engGlow[0].material.opacity=.28+pulse*.42;plane.userData.engGlow[1].material.opacity=.28+pulse*.42}}
   sky.position.copy(cam.position);skyDust.position.copy(cam.position);skyDust.rotation.y+=dt*.0007;water.material.opacity=.69+.03*Math.sin(now*.0007);
   smokeT-=dt;if(smokeT<=0){smokeT=.06;if(alive&&!spectatorMode)emitSmoke(plane,hp/maxhp*100);for(const id in remotes)if(remotes[id].alive!==false)emitSmoke(remotes[id].mesh,remotes[id].hp/(remotes[id].mh||100)*100)}
