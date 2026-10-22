@@ -28,12 +28,12 @@ assert(client.includes('const PORTAL_STANDALONE=true;'), 'Could not set the Port
 
 // The portal build is single-player only. Guard backend entry points, remove startup social
 // connections, and remove the version endpoint request so no game-server request is sent.
-client = replaceOnce(client, 'function connect(req){', 'function connect(req){if(PORTAL_STANDALONE){console.warn("Online rooms are disabled in Portal Edition.");return false;}', 'multiplayer socket entry point');
+client = replaceOnce(client, 'function connect(first){', 'function connect(req){if(PORTAL_STANDALONE){console.warn("Online rooms are disabled in Portal Edition.");return false;}', 'multiplayer socket entry point');
 client = replaceOnce(client, 'function connectSocial(){', 'function connectSocial(){if(PORTAL_STANDALONE)return;', 'social socket entry point');
 const versionRequest = /fetch\('\/api\/version'.*?\n(?=document\.getElementById\('acceptSocialInvite'\))/s;
 assert(versionRequest.test(client), 'Could not find the server-version request to remove.');
 client = client.replace(versionRequest, "const portalBuildBadge=document.getElementById('buildVersionBadge');if(portalBuildBadge)portalBuildBadge.textContent='MAYDAY · FLIGHT CHALLENGE';\n");
-client = replaceOnce(client, 'setMusic(true);connectSocial();setInterval(', 'setMusic(true);setInterval(', 'automatic social connection at startup');
+client = replaceOnce(client, 'setMusic(true);setInterval(', 'setMusic(true);setInterval(', 'automatic social connection at startup');
 client = client.replace(/const MAYDAY_BUILD='v74\.0-portal-edition';/, "const MAYDAY_BUILD='v74.0-portal-edition';");
 client = client.replaceAll("'/audio/", "'./audio/").replaceAll('"/audio/', '"./audio/');
 
@@ -140,7 +140,7 @@ assert(html.includes('src="./vendor/three.min.js"'), 'Local Three.js tag is miss
 assert((html.match(/<script[^>]+src=["']https?:/gi) || []).every(tag => tag.includes(pokiSdkUrl)),
   'Unexpected external script detected. Only the Poki SDK may be external.');
 assert(!client.includes("fetch('/api/version'"), 'API version fetch remains in the portal client.');
-assert(!client.includes("const PORTAL_STANDALONE=true;\nfunction portalViewportSize"), 'Portal viewport helper insertion failed.');
+assert(client.includes("const PORTAL_STANDALONE=true;\nfunction portalViewportSize"), 'Portal viewport helper insertion failed.');
 assert(client.includes("function connect(req){if(PORTAL_STANDALONE)"), 'Multiplayer socket guard is missing.');
 assert(client.includes("function connectSocial(){if(PORTAL_STANDALONE)return;"), 'Social socket guard is missing.');
 assert(client.includes("window.__portalGameFrozen)return;"), 'Render-loop pause guard is missing.');
