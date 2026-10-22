@@ -282,10 +282,10 @@ test('combat hit reports require a recent plausible shot and cannot spoof damage
     const vw = await victim.waitFor(m => m.t==='welcome' && m.code===aw.code);
     await attacker.waitFor(m => m.t==='room' && m.code===aw.code && m.players.length===2);
 
-    attacker.send({t:'s', p:[0,500,0], q:[0,0,0,1]});
-    victim.send({t:'s', p:[0,500,1000], q:[0,0,0,1]});
     attacker.send({t:'start'});
     await attacker.waitFor(m => m.t==='round' && m.mode==='ffa' && m.n===1);
+    attacker.send({t:'s', p:[0,500,0], q:[0,0,0,1]});
+    victim.send({t:'s', p:[0,500,1000], q:[0,0,0,1]});
     await new Promise(resolve => setTimeout(resolve, 3200));
 
     const before = attacker.events.filter(m => m.t==='snap' && m.players && m.players[vw.id]).at(-1);
