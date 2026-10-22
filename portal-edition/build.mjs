@@ -141,7 +141,7 @@ assert((html.match(/<script[^>]+src=["']https?:/gi) || []).every(tag => tag.incl
   'Unexpected external script detected. Only the Poki SDK may be external.');
 assert(!client.includes("fetch('/api/version'"), 'API version fetch remains in the portal client.');
 assert(client.includes("const PORTAL_STANDALONE=true;\nfunction portalViewportSize"), 'Portal viewport helper insertion failed.');
-assert(client.includes("function connect(req){if(PORTAL_STANDALONE)"), 'Multiplayer socket guard is missing.');
+assert(client.includes("function connect(first){if(PORTAL_STANDALONE)"), 'Multiplayer socket guard is missing.');
 assert(client.includes("function connectSocial(){if(PORTAL_STANDALONE)return;"), 'Social socket guard is missing.');
 assert(client.includes("window.__portalGameFrozen)return;"), 'Render-loop pause guard is missing.');
 assert(client.includes("portalShowMissionComplete();"), 'Mission-complete flow is missing.');
