@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v78.0-mobile-touch-polish';
+const MAYDAY_BUILD='v79.0-bot-combat-fix';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1506,7 +1506,7 @@ const mw=document.getElementById('missileWarning');if(mw){mw.style.display=(miss
  for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];
   if(b.tid&&remotes[b.tid]){const sp=b.d.length(),want=remotes[b.tid].mesh.position.clone().sub(b.m.position).normalize();b.d.normalize().lerp(want,Math.min(1,dt*4)).normalize();b.m.quaternion.setFromUnitVectors(MZ,b.d);b.d.multiplyScalar(sp)}
   b.m.position.addScaledVector(b.d,dt);b.life-=dt;let dead=b.life<=0;
-  if(b.mine&&!dead&&alive&&!killReplayActive){for(const id in remotes)if(remotes[id].team!==myTeam&&remotes[id].alive!==false&&b.m.position.distanceTo(remotes[id].mesh.position)<30){if(practiceMode)practiceBotHit(id,25);else if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'hit',id:+id}));dead=true;break}}
+  if(b.mine&&!dead&&alive&&!killReplayActive){for(const id in remotes)if(remotes[id].team!==myTeam&&remotes[id].alive!==false&&b.m.position.distanceTo(remotes[id].mesh.position)<30){if(practiceMode)practiceBotHit(id,25);else if(ws&&ws.readyState===1){if(remotes[id]?.ai)ws.send(JSON.stringify({t:'botHit',id:+id,weapon:'gun'}));else ws.send(JSON.stringify({t:'hit',id:+id}))}dead=true;break}}
   if(!b.mine&&!dead&&practiceMode&&b.practiceBot&&alive&&!killReplayActive&&performance.now()>spawnGrace&&b.m.position.distanceTo(plane.position)<30){practicePlayerHit(b.damage||7,b.from||'practice-1');dead=true}
   if(dead){scene.remove(b.m);bullets.splice(i,1)}}
 
@@ -1518,7 +1518,7 @@ const mw=document.getElementById('missileWarning');if(mw){mw.style.display=(miss
    if(ms.homing!==false&&seekerOk&&!blocked&&seekerAngle<=MISSILE_SEEKER_CONE){ms.lostAt=0;const want=targetPos.clone().sub(ms.m.position);if(want.lengthSq()>1)want.normalize();const maxTurn=(ms.turnRate||2.2)*dt;const ang=ms.dir.angleTo(want);if(ang>1e-4)ms.dir.lerp(want,Math.min(1,maxTurn/ang)).normalize();}
    else if(ms.homing!==false){ms.lostAt=(ms.lostAt||0)+dt;if(ms.lostAt>MISSILE_BREAK_TIME)ms.homing=false}
    if(!practiceMode&&String(ms.tid)===String(myId)&&flareSites.length){for(const f of flareSites){if(f.owner===String(myId))continue;const fd=f.g.position.distanceTo(ms.m.position);if(fd<620&&Math.random()<dt*.85){ms.flareTarget=f;ms.homing=true;ms.lostAt=0;break}}}
-   if(dist<MISSILE_PROXIMITY){boom=true;if(practiceMode&&ms.mine&&tg)practiceBotHit(ms.tid,50);else if(practiceMode&&!ms.mine&&ms.tid===String(myId))practicePlayerHit(ms.damage||34,ms.by||'practice-1');else if(!killReplayActive&&!ms.mine&&ms.tid===String(myId)&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'mhit',by:ms.by}))}}
+   if(dist<MISSILE_PROXIMITY){boom=true;if(practiceMode&&ms.mine&&tg)practiceBotHit(ms.tid,50);else if(practiceMode&&!ms.mine&&ms.tid===String(myId))practicePlayerHit(ms.damage||34,ms.by||'practice-1');else if(!killReplayActive&&ms.mine&&tg&&remotes[ms.tid]?.ai&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'botHit',id:+ms.tid,weapon:'missile'}));else if(!killReplayActive&&!ms.mine&&ms.tid===String(myId)&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'mhit',by:ms.by}))}}
   const missileFrom=ms.m.position.clone();ms.m.position.addScaledVector(ms.dir,ms.sp*dt);ms.m.quaternion.setFromUnitVectors(MZ,ms.dir);
   if(challengeMode&&ms.mine&&ms.challengeShot&&!boom){const segment=ms.m.position.clone().sub(missileFrom),lenSq=segment.lengthSq();if(lenSq>1e-6){for(const target of flightChallenge.targets){if(!target.active||target.level!==flightChallenge.currentLevel)continue;const t=T.MathUtils.clamp(target.center.clone().sub(missileFrom).dot(segment)/lenSq,0,1),closest=missileFrom.clone().addScaledVector(segment,t);if(closest.distanceTo(target.center)<=target.hitRadius){challengeTargetHit(target.id);boom=true;break}}}}
   puff(ms.m.position.clone().addScaledVector(ms.dir,-7),0xffb050,2.8,.12,new T.Vector3(),.95,{add:true,grow:.5});
