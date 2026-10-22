@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v71.0-sequenced-flight-challenge';
+const MAYDAY_BUILD='v72.0-tougher-flight-challenge';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -489,7 +489,7 @@ function updatePracticeBots(now,dt){
  }
 }
 function i18nBotName(id){return 'DRONE '+String(id).split('-')[1]}
-const FLIGHT_CHALLENGE_LEVELS=[{name:'ARCH ENTRY',gates:[0],flags:[0],targets:[0]},{name:'CITY SLALOM',gates:[1,2],flags:[1],targets:[1]},{name:'RIDGE RUN',gates:[3],flags:[2,3],targets:[2]},{name:'TOWER STRIKE',gates:[4,5],flags:[4,5],targets:[3]},{name:'FINAL GAUNTLET',gates:[6],flags:[6],targets:[4]}];
+const FLIGHT_CHALLENGE_LEVELS=[{name:'ARCH ENTRY',gates:[0],flags:[0],targets:[0]},{name:'CITY SLALOM',gates:[1,2],flags:[1,2],targets:[1]},{name:'RIDGE RUN',gates:[3],flags:[3],targets:[2]},{name:'TOWER STRIKE',gates:[4,5],flags:[4,5],targets:[3]},{name:'FINAL GAUNTLET',gates:[6],flags:[6],targets:[4]}];
 const flightChallenge={objects:[],solids:[],gates:[],flags:[],targets:[],nextGate:0,flagsCollected:0,targetsDestroyed:0,currentLevel:0,startTime:0,finished:false,lastGateMiss:0};
 function clearFlightChallenge(){
   const geometrySet=new Set(),materialSet=new Set();
@@ -561,7 +561,7 @@ function createFlightChallengeCourse(){
     const flagMat=new T.MeshStandardMaterial({color:[0xffd166,0x62e7ff,0xff786b,0xa6ff89][i%4],emissive:0x281b05,side:T.DoubleSide,metalness:.12,roughness:.42});
     const cloth=new T.Mesh(new T.BoxGeometry(62,34,3),flagMat);cloth.position.set(28,spec.alt-6,0);root.add(cloth);
     const marker=new T.Mesh(new T.TorusGeometry(24,4,8,24),new T.MeshBasicMaterial({color:0xffed9a}));marker.position.set(28,spec.alt-6,0);root.add(marker);
-    root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);const flagLevel=[0,1,2,2,3,3,4][i];root.visible=flagLevel===0;
+    root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);const flagLevel=[0,1,1,2,3,3,4][i];root.visible=flagLevel===0;
     flightChallenge.flags.push({id:'flag-'+(i+1),root,cloth,position:new T.Vector3(spec.x,ground+spec.alt-6,spec.z),level:flagLevel,active:true});
   }
   const buildingSpecs=[
