@@ -621,7 +621,7 @@ function flightChallengeCollision(px,py,pz){
   for(const target of flightChallenge.targets){if(!target.root.visible||!target.active||target.level!==flightChallenge.currentLevel)continue;
     const localPrev=prev.clone().sub(target.root.position).applyQuaternion(target.quaternion.clone().invert()),localCur=cur.clone().sub(target.root.position).applyQuaternion(target.quaternion.clone().invert());
     if(localPrev.z*localCur.z<=0&&Math.abs(localPrev.z-localCur.z)>1e-5){const t=T.MathUtils.clamp(localPrev.z/(localPrev.z-localCur.z),0,1),p=localPrev.clone().lerp(localCur,t),r=Math.hypot(p.x,p.y-target.alt);if(r<=28||(r>=48&&r<=85))return {challengeObstacle:'target',name:target.id}}
-    const ground=target.root.position.y,dy=Math.max(prev.y,cur.y);if(dy>=ground-10&&Math.min(prev.y,cur.y)<=target.center.y+20&&segPointDist2(cur.x,cur.z,target.root.position.x,target.root.position.z,prev.x,prev.z)<42*42)return {challengeObstacle:'target-tower',name:target.id};
+    const ground=target.root.position.y,dy=Math.max(prev.y,cur.y);if(dy>=ground-10&&Math.min(prev.y,cur.y)<=target.center.y+20&&segPointDist2(target.root.position.x,target.root.position.z,prev.x,prev.z,cur.x,cur.z)<42*42)return {challengeObstacle:'target-tower',name:target.id};
   }
   return null;
 }
