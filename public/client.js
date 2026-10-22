@@ -963,9 +963,9 @@ function renderRecoveryPanel(){const x=readRecovery(),panel=document.getElementB
 
 function connect(first){
  roomExitInProgress=false;intentionalDisconnect=false;
- if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent='Connecting to MAYDAY social...';return}
- initAudio();errEl.textContent='Connecting...';roomCode='';
- setTimeout(()=>{if(ws===socket&&!roomCode&&!joiningSocialInviteId&&!practiceMode&&!inGame)errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
+ if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent=first?.t==='matchmake'?'':'Connecting to MAYDAY social...';return}
+ initAudio();errEl.textContent=first?.t==='matchmake'?'':'Connecting...';roomCode='';
+ setTimeout(()=>{if(ws===socket&&!roomCode&&!joiningSocialInviteId&&!practiceMode&&!inGame&&!(first?.t==='matchmake'&&matchmakingActive))errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
  pickedColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';invert=document.getElementById('inv').checked?1:-1;ptype=document.getElementById('ptype').value;maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;saveSet();
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws=socket;
  socket.onopen=()=>{if(ws!==socket){try{socket.close(1000,'superseded')}catch{}return}const outgoing=Object.assign({n:document.getElementById('name').value||'Pilot',ty:ptype,colorId:selectedColorId,profileId:socialIdentity?.id,profileToken:socialIdentity?.token},first);if(outgoing.inviteId)inviteDebug('game socket open; sending join',`id=${String(outgoing.inviteId).slice(0,8)} room=${outgoing.roomId||outgoing.code} profile=${outgoing.profileId||'MISSING'} token=${outgoing.profileToken?'present':'MISSING'}`);socket.send(JSON.stringify(outgoing))};
@@ -1131,16 +1131,27 @@ document.getElementById('friendsToggle')?.addEventListener('click',()=>setFriend
 try{const savedSidebar=localStorage.getItem('maydayFriendsSidebarOpen');setFriendsSidebarOpen(savedSidebar===null?true:savedSidebar==='1',false)}catch{setFriendsSidebarOpen(true,false)}
 
 let selectedMode='';
-let matchmakingActive=false,matchmakingMode='';
+let matchmakingActive=false,matchmakingMode='',matchmakingElapsedSeconds=0;
 function updateMatchmakingUi(state='idle',data={}){
   const panel=document.getElementById('matchmakingPanel'),status=document.getElementById('matchmakingStatus');
   const quick=document.getElementById('quickMatch'),cancel=document.getElementById('cancelMatchmaking');
   const friend=document.getElementById('hostMode'),join=document.getElementById('joinMode');
+  const modeHelp=document.getElementById('modeHelp'),selectedPanel=document.getElementById('selectedModePanel');
+  const err=document.getElementById('err');
   const mode=data.mode||matchmakingMode||selectedMode;
   if(data.mode)matchmakingMode=data.mode;
   const onlineMode=['ffa','clash','survivor'].includes(mode);
+  const showSearch=state==='connecting'||state==='searching'||state==='matched';
+  if(modeHelp)modeHelp.style.display=showSearch?'none':'';
+  if(selectedPanel)selectedPanel.style.display=showSearch?'none':(selectedMode?'block':'none');
+  if(showSearch&&err)err.textContent='';
+  if(state==='connecting')matchmakingElapsedSeconds=0;
+  else if(data.waitedSeconds!==undefined&&Number.isFinite(Number(data.waitedSeconds)))matchmakingElapsedSeconds=Math.max(0,Number(data.waitedSeconds));
+  const elapsed=matchmakingElapsedSeconds;
+  const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
   if(state==='idle'){
     matchmakingActive=false;
+    matchmakingElapsedSeconds=0;
     if(panel)panel.style.display='none';
     if(cancel)cancel.style.display='none';
     if(quick)quick.style.display=onlineMode?'inline-block':'none';
@@ -1149,21 +1160,11 @@ function updateMatchmakingUi(state='idle',data={}){
     return;
   }
   if(panel)panel.style.display='block';
-  if(state==='connecting'){
+  if(state==='connecting'||state==='searching'){
     if(friend)friend.style.display='none';
     if(join)join.style.display='none';
     matchmakingActive=true;
-    if(status)status.textContent='Connecting to MAYDAY matchmaking…';
-    if(quick)quick.style.display='none';
-    if(cancel)cancel.style.display='inline-block';
-    return;
-  }
-  if(state==='searching'){
-    if(friend)friend.style.display='none';
-    if(join)join.style.display='none';
-    matchmakingActive=true;
-    const count=Number(data.players)||0,target=Number(data.target)||0,waited=Number(data.waitedSeconds)||0;
-    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'A match can still start if the queue stays quiet.':'Finding available pilots. Some matches may include computer-controlled pilots.');
+    if(status)status.textContent='MATCHMAKING · '+elapsedLabel;
     if(quick)quick.style.display='none';
     if(cancel)cancel.style.display='inline-block';
     return;
@@ -1172,7 +1173,7 @@ function updateMatchmakingUi(state='idle',data={}){
     if(friend)friend.style.display='none';
     if(join)join.style.display='none';
     matchmakingActive=false;
-    if(status)status.textContent='Match found! Joining room '+(data.roomCode||'')+'…';
+    if(status)status.textContent='MATCH FOUND · '+elapsedLabel;
     if(quick)quick.style.display='none';
     if(cancel)cancel.style.display='none';
     return;
