@@ -65,7 +65,7 @@ function makeClient(url) {
 async function startServer(port, dataDir) {
   const child = spawn(process.execPath, [path.join(root, 'server.js')], {
     cwd: root,
-    env: {...process.env, PORT: String(port), MAYDAY_DATA_DIR: dataDir, MAYDAY_MATCHMAKING_TIMEOUT_MS: '250'},
+    env: {...process.env, PORT: String(port), MAYDAY_DATA_DIR: dataDir, MAYDAY_MATCHMAKING_TIMEOUT_MS: '1000'},
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let output = '';
@@ -117,6 +117,28 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.match(cancelled.message, /cancel/i);
     });
 
+    await t.test('a solo queue becomes a full AI-filled Dogfight and AI pilots move on the server', async () => {
+      const pilot = await connect('Solo Pilot');
+      pilot.send({t:'matchmake', mode:'ffa', n:'Solo Pilot', ty:'balanced'});
+      const matched = await pilot.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
+      assert.equal(matched.players, 8);
+      assert.equal(matched.aiPlayers, 7);
+      await pilot.waitFor(m => m.t==='round' && m.mode==='ffa');
+      const room = await pilot.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+      assert.equal(room.players.length, 8);
+      assert.equal(room.players.filter(p => p.ai).length, 7);
+      assert.equal(room.players.filter(p => !p.ai).length, 1);
+      const firstSnap = await pilot.waitFor(m => m.t==='snap' && Object.values(m.players||{}).filter(p => p.ai).length===7);
+      const botId = Object.keys(firstSnap.players).find(id => firstSnap.players[id].ai);
+      const firstPosition = firstSnap.players[botId].p.slice();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const latestSnap = [...pilot.events].reverse().find(m => m.t==='snap' && m.players?.[botId]);
+      assert.ok(latestSnap, 'server should publish shared snapshots for AI pilots');
+      assert.notDeepEqual(latestSnap.players[botId].p, firstPosition, 'AI aircraft should move server-side');
+      pilot.send({t:'leave'});
+      await pilot.waitFor(m => m.t==='left' && m.ok===true);
+    });
+
     await t.test('Dogfight pairs queued pilots into a live room after the quiet-queue timeout', async () => {
       const a = await connect('Dogfight A');
       const b = await connect('Dogfight B');
@@ -133,7 +155,8 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.ok(welcomeA?.code);
       assert.equal(welcomeA.code, welcomeB.code);
       const liveRoom = await a.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
-      assert.equal(liveRoom.players.length, 2);
+      assert.equal(liveRoom.players.length, 8);
+      assert.equal(liveRoom.players.filter(p => p.ai).length, 6);
     });
 
     await t.test('Clash Squad distributes a partial queue evenly across two teams', async () => {
@@ -143,12 +166,15 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       teamPilots.forEach((pilot, i) => pilot.send({t:'matchmake', mode:'clash', n:'Clash '+String.fromCharCode(65+i), ty:'balanced'}));
       await Promise.all(teamPilots.map(p => p.waitFor(m => m.t==='round' && m.mode==='clash')));
       const room = await teamPilots[0].waitFor(m => m.t==='room' && m.mode==='clash' && m.state==='playing');
-      assert.equal(room.players.length, 4);
+      assert.equal(room.players.length, 8);
+      assert.equal(room.players.filter(p => p.ai).length, 4);
       const counts = room.players.reduce((acc, p) => {
         acc[p.team] = (acc[p.team] || 0) + 1;
         return acc;
       }, {});
-      assert.deepEqual(Object.values(counts).sort((x,y)=>x-y), [2,2]);
+      assert.deepEqual(Object.values(counts).sort((x,y)=>x-y), [4,4]);
+      const humanCounts = room.players.filter(p => !p.ai).reduce((acc,p) => { acc[p.team]=(acc[p.team]||0)+1; return acc; }, {});
+      assert.deepEqual(Object.values(humanCounts).sort((x,y)=>x-y), [2,2]);
       assert.ok(teamPilots.every(p => p.events.some(m => m.t==='welcome' && m.mode==='clash')));
     });
 
@@ -167,7 +193,8 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       const welcomeB = b.events.find(m => m.t==='welcome' && m.mode==='survivor');
       assert.equal(welcomeA.code, welcomeB.code);
       const liveRoom = await a.waitFor(m => m.t==='room' && m.mode==='survivor' && m.state==='playing');
-      assert.equal(liveRoom.players.length, 2);
+      assert.equal(liveRoom.players.length, 6);
+      assert.equal(liveRoom.players.filter(p => p.ai).length, 4);
     });
   } finally {
     for (const client of clients) client.close();
