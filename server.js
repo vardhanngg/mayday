@@ -281,6 +281,132 @@ function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const ident
   const color=colorId?(COLOR_BY_ID[colorId].color):'#ffffff';
   r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:String(m.n||'Pilot').slice(0,14),team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
   return id}
+const queueTimeoutOverride=Number(process.env.MAYDAY_MATCHMAKING_TIMEOUT_MS)||0;
+const MATCHMAKING={
+  ffa:{target:8,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000},
+  clash:{target:8,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):25000},
+  survivor:{target:6,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000}
+};
+const matchmakingQueues=Object.fromEntries(Object.keys(MATCHMAKING).map(mode=>[mode,[]]));
+const matchmakingLastPublished=Object.create(null);
+function publishMatchmakingQueue(mode,now=Date.now(),force=false){
+  const cfg=MATCHMAKING[mode],queue=matchmakingQueues[mode];if(!cfg||!queue)return;
+  if(!force&&now-(matchmakingLastPublished[mode]||0)<1000)return;
+  matchmakingLastPublished[mode]=now;
+  for(let i=queue.length-1;i>=0;i--){
+    const entry=queue[i];
+    if(entry.ws.readyState!==1||entry.ws.matchmakingEntry!==entry||entry.ws.room){queue.splice(i,1);if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null}
+  }
+  for(let i=0;i<queue.length;i++){
+    const entry=queue[i];
+    send(entry.ws,{t:'matchmaking',status:'searching',mode,players:queue.length,target:cfg.target,minPlayers:cfg.minPlayers,waitedSeconds:Math.max(0,Math.floor((now-entry.queuedAt)/1000)),position:i+1});
+  }
+}
+function removeMatchmakingEntry(ws,status='cancelled',message=''){
+  const entry=ws.matchmakingEntry;if(!entry)return false;
+  const queue=matchmakingQueues[entry.mode]||[],idx=queue.indexOf(entry);
+  if(idx>=0)queue.splice(idx,1);
+  ws.matchmakingEntry=null;
+  const cfg=MATCHMAKING[entry.mode];
+  send(ws,{t:'matchmaking',status,mode:entry.mode,message,players:queue.length,target:cfg?.target||0,minPlayers:cfg?.minPlayers||2});
+  publishMatchmakingQueue(entry.mode,Date.now(),true);
+  return true;
+}
+function queueForMatchmaking(ws,m){
+  const mode=String(m.mode||'');
+  const cfg=MATCHMAKING[mode];
+  if(!cfg)return send(ws,{t:'err',m:'Choose Dogfight, Clash Squad, or Survivor for online matchmaking.'});
+  if(ws.room)return send(ws,{t:'err',m:'Leave your current room before searching for a match.'});
+  if(ws.matchmakingEntry){
+    if(ws.matchmakingEntry.mode===mode){publishMatchmakingQueue(mode,Date.now(),true);return}
+    removeMatchmakingEntry(ws,'cancelled','Previous search cancelled.');
+  }
+  const identity=authProfile(m.profileId,m.profileToken);
+  if(identity){
+    for(const queuedMode of Object.keys(matchmakingQueues)){
+      for(const entry of [...matchmakingQueues[queuedMode]]){
+        if(entry.profileId===identity.id&&entry.ws!==ws)removeMatchmakingEntry(entry.ws,'replaced','Your MAYDAY profile started a new matchmaking search in another tab.');
+      }
+    }
+  }
+  const queue=matchmakingQueues[mode];
+  if(queue.length>=256)return send(ws,{t:'err',m:'This mode’s matchmaking queue is busy. Please try again shortly.'});
+  const entry={
+    ws,mode,queuedAt:Date.now(),profileId:identity?.id||null,
+    player:{
+      n:safeName(m.n),ty:HP[m.ty]?m.ty:'balanced',
+      colorId:COLOR_BY_ID[m.colorId]?m.colorId:null,
+      profileId:identity?.id||undefined,profileToken:identity?String(m.profileToken):undefined
+    }
+  };
+  ws.matchmakingEntry=entry;queue.push(entry);
+  publishMatchmakingQueue(mode,Date.now(),true);
+  processMatchmakingQueues();
+}
+function createQuickMatch(mode,batch){
+  const cfg=MATCHMAKING[mode];
+  const eligible=batch.filter(entry=>entry.ws.readyState===1&&entry.ws.matchmakingEntry===entry&&!entry.ws.room);
+  for(const entry of batch)if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null;
+  if(eligible.length<cfg.minPlayers){
+    for(const entry of eligible)send(entry.ws,{t:'matchmaking',status:'error',mode,message:'Not enough pilots remained connected. Search again to find a match.'});
+    for(const modeName of Object.keys(matchmakingQueues))publishMatchmakingQueue(modeName,Date.now(),true);
+    return;
+  }
+  const r={code:mkCode(),mode,teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null,quickMatch:true};
+  if(mode==='clash')for(const team of activeTeams(r))r.score[team.id]=0;
+  rooms[r.code]=r;
+  const seated=[];
+  for(const entry of eligible){
+    try{
+      const id=addPlayer(entry.ws,r,entry.player);
+      if(!r.host)r.host=id;
+      seated.push({entry,id});
+    }catch(e){
+      entry.ws.room=null;delete entry.ws.id;delete entry.ws.sessionToken;
+      send(entry.ws,{t:'matchmaking',status:'error',mode,message:'Could not join the match. Please search again.'});
+    }
+  }
+  if(seated.length<cfg.minPlayers){
+    for(const p of list(r)){p.ws.room=null;delete p.ws.id;send(p.ws,{t:'err',m:'Matchmaking could not seat enough pilots. Please try again.'});try{p.ws.close(1011,'matchmaking failed')}catch{}}
+    delete rooms[r.code];return;
+  }
+  for(const p of list(r)){
+    p.sc=0;p.kills=0;p.deaths=0;p.damage=0;p.shieldUses=0;p.eliminated=false;
+    p.livesRemaining=mode==='survivor'?r.lives:null;
+  }
+  r.score={};
+  if(mode==='clash')for(const team of activeTeams(r))r.score[team.id]=0;
+  for(const {entry,id} of seated){
+    send(entry.ws,{t:'matchmaking',status:'matched',mode,players:seated.length,target:cfg.target,roomCode:r.code});
+    send(entry.ws,{t:'welcome',id,code:r.code,roomId:r.code,mode,session:r.players[id].sessionToken,quickMatch:true});
+  }
+  // Send the regular lobby snapshot first so existing clients initialize their room state,
+  // then start the first round through the same protocol as manually hosted games.
+  rcast(r,info(r));
+  startRound(r);
+  rcast(r,info(r));
+  broadcastGames();
+  console.log('[matchmaking] started mode='+mode+' room='+r.code+' pilots='+seated.length+(seated.length<cfg.target?' (partial queue)':''));
+}
+function processMatchmakingQueues(now=Date.now()){
+  for(const mode of Object.keys(MATCHMAKING)){
+    const cfg=MATCHMAKING[mode],queue=matchmakingQueues[mode];
+    for(let i=queue.length-1;i>=0;i--){
+      const entry=queue[i];
+      if(entry.ws.readyState!==1||entry.ws.matchmakingEntry!==entry||entry.ws.room){
+        queue.splice(i,1);if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null;
+      }
+    }
+    while(queue.length>=cfg.target){
+      createQuickMatch(mode,queue.splice(0,cfg.target));
+    }
+    if(queue.length>=cfg.minPlayers&&queue[0]&&now-queue[0].queuedAt>=cfg.timeoutMs){
+      createQuickMatch(mode,queue.splice(0,Math.min(cfg.target,queue.length)));
+    }
+    publishMatchmakingQueue(mode,now);
+  }
+}
+
 const spawn=p=>{p.inRound=true;p.alive=true;p.hp=p.mh;p.prot=Date.now()+PROT;p.lastSpawn=Date.now();p.shields=p.shields===undefined?3:3;p.shieldUntil=0;p.flares=3;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;p.eliminated=false};
 function startRound(r){clearTimeout(r.timer);r.round++;r.state='playing';r.roundHiddenUntil=r.mode==='clash'?Date.now()+CLASH_STEALTH:0;list(r).forEach(p=>{if(r.mode==='survivor')p.livesRemaining=r.lives||1;
   // A disconnected Clash pilot is eliminated for this round. Do not respawn an
@@ -326,6 +452,9 @@ wss.on('connection',ws=>{
   ws.on('message',raw=>{let m;try{m=JSON.parse(raw)}catch{return}
     if(typeof m.t==='string'&&m.t.startsWith('social')){handleSocialMessage(ws,m);return}
     if(m.t==='leave'){detachSocketFromRoom(ws);const leaver=socialStore.profiles[ws.profileId];if(leaver){leaver.status='lobby';leaver.roomCode='';leaver.mode='';leaver.roomState='';refreshSocialNeighborhood(leaver)}send(ws,{t:'left',ok:true});return}
+    if(m.t==='matchmake'){queueForMatchmaking(ws,m);return}
+    if(m.t==='matchmakeCancel'){if(!removeMatchmakingEntry(ws,'cancelled','Search cancelled.'))send(ws,{t:'matchmaking',status:'cancelled',mode:m.mode||'',message:'Search cancelled.'});return}
+    if(ws.matchmakingEntry&&!['matchmake','matchmakeCancel'].includes(m.t))removeMatchmakingEntry(ws,'cancelled','Search cancelled.');
     let r=rooms[ws.room];
     if(m.t==='host'&&!r){
       r={code:mkCode(),mode:['ffa','clash','survivor'].includes(m.mode)?m.mode:'ffa',teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null};
@@ -428,7 +557,7 @@ wss.on('connection',ws=>{
       if(now-me.lockSince>=LOCK_DURATION)send(t.ws,{t:'locked',by:id,n:me.n,c:colOf(r,me)});
     }
   });
-  ws.on('close',(code,reason)=>{if(ws.socialProfileId&&socialSockets.get(ws.socialProfileId)===ws){socialSockets.delete(ws.socialProfileId);const sp=socialStore.profiles[ws.socialProfileId];if(sp){sp.status='offline';sp.roomCode='';sp.mode='';sp.roomState='';refreshSocialNeighborhood(sp)}}const r=rooms[ws.room];if(!r)return;if(ws.spectator){r.spectators?.delete(ws);return;}const p=r.players[ws.id];if(!p||p.ws!==ws)return;
+  ws.on('close',(code,reason)=>{if(ws.matchmakingEntry)removeMatchmakingEntry(ws,'cancelled','Connection closed.');if(ws.socialProfileId&&socialSockets.get(ws.socialProfileId)===ws){socialSockets.delete(ws.socialProfileId);const sp=socialStore.profiles[ws.socialProfileId];if(sp){sp.status='offline';sp.roomCode='';sp.mode='';sp.roomState='';refreshSocialNeighborhood(sp)}}const r=rooms[ws.room];if(!r)return;if(ws.spectator){r.spectators?.delete(ws);return;}const p=r.players[ws.id];if(!p||p.ws!==ws)return;
     const explicitLeave=code===1000&&String(reason||'')==='left room';
     if(explicitLeave){
       delete r.players[ws.id];clearTimeout(p.reconnectTimer);
@@ -449,6 +578,7 @@ wss.on('connection',ws=>{
     rcast(r,info(r));broadcastGames();});
 });
 // Keep game snapshots frequent, but send the lightweight room-list refresh once per second.
+const matchmakingTimer=setInterval(()=>processMatchmakingQueues(),500);
 const snapshotTimer=setInterval(()=>{for(const r of Object.values(rooms)){if(r.state==='playing'&&r.mode==='clash')checkRound(r);if(r.state!=='playing'&&r.state!=='between')continue;
   const players={};for(const k in r.players)players[k]=pub(r,r.players[k]);rcast(r,{t:'snap',players,score:r.score,round:r.round,state:r.state})}},50);
 const roomListTimer=setInterval(broadcastGames,1000);
@@ -456,7 +586,7 @@ const roomListTimer=setInterval(broadcastGames,1000);
 const heartbeatTimer=setInterval(()=>{for(const client of wss.clients){if(client.isAlive===false){client.terminate();continue}client.isAlive=false;try{client.ping()}catch{client.terminate()}}},25000);
 heartbeatTimer.unref?.();roomListTimer.unref?.();snapshotTimer.unref?.();
 let shuttingDown=false;
-function shutdown(signal){if(shuttingDown)return;shuttingDown=true;console.log(`MAYDAY ${signal}: shutting down gracefully`);clearInterval(heartbeatTimer);clearInterval(roomListTimer);clearInterval(snapshotTimer);for(const client of wss.clients){try{send(client,{t:'serverRestarting',message:'MAYDAY server is restarting. Active rooms will end; reconnect after it is back.'});client.close(1012,'service restart')}catch{try{client.terminate()}catch{}}}const force=setTimeout(()=>{for(const client of wss.clients)try{client.terminate()}catch{}process.exit(0)},8000);force.unref?.();server.close(()=>{clearTimeout(force);process.exit(0)})}
+function shutdown(signal){if(shuttingDown)return;shuttingDown=true;console.log(`MAYDAY ${signal}: shutting down gracefully`);clearInterval(heartbeatTimer);clearInterval(roomListTimer);clearInterval(snapshotTimer);clearInterval(matchmakingTimer);for(const client of wss.clients){try{send(client,{t:'serverRestarting',message:'MAYDAY server is restarting. Active rooms will end; reconnect after it is back.'});client.close(1012,'service restart')}catch{try{client.terminate()}catch{}}}const force=setTimeout(()=>{for(const client of wss.clients)try{client.terminate()}catch{}process.exit(0)},8000);force.unref?.();server.close(()=>{clearTimeout(force);process.exit(0)})}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
 server.listen(PORT,'0.0.0.0',()=>{
   console.log(`\nMAYDAY ${BUILD_VERSION} (Dogfight + Clash Squad + Survivor) running!\n  You:      http://localhost:${PORT}\n  Health:   http://localhost:${PORT}/healthz\n  Version:  http://localhost:${PORT}/api/version\n  Data dir: ${SOCIAL_DIR}`);
