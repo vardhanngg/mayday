@@ -1,15 +1,17 @@
 {
   "name": "flight-battle",
-  "version": "65.0.0",
+  "version": "75.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/client.js"
+    "check": "node --check server.js && node --check public/client.js",
+    "test:matchmaking": "node --test tests/matchmaking.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "description": "MAYDAY browser-based 3D aircraft game with automatic online matchmaking"
 }
