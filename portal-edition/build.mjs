@@ -137,7 +137,8 @@ assert(!html.includes('google-adsense-account'), 'AdSense metadata remains in th
 assert(!html.includes('cdnjs.cloudflare.com'), 'External Three.js CDN reference remains.');
 assert(!html.includes('/client.js?v='), 'Website client path remains.');
 assert(html.includes('src="./vendor/three.min.js"'), 'Local Three.js tag is missing.');
-assert((html.match(/<script[^>]+src=["']https?:/gi) || []).every(tag => tag.includes(pokiSdkUrl)),
+const externalScriptSrcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map(m => m[1]).filter(src => /^https?:/i.test(src));
+assert(externalScriptSrcs.every(src => src === pokiSdkUrl),
   'Unexpected external script detected. Only the Poki SDK may be external.');
 assert(!client.includes("fetch('/api/version'"), 'API version fetch remains in the portal client.');
 assert(client.includes("const PORTAL_STANDALONE=true;\nfunction portalViewportSize"), 'Portal viewport helper insertion failed.');
