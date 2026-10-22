@@ -609,7 +609,7 @@ function createFlightChallengeCourse(){
     const bullseyeMat=new T.MeshStandardMaterial({color:0xffd166,emissive:0x382400,metalness:.05,roughness:.5});
     const bullseye=new T.Mesh(new T.CircleGeometry(17,24),bullseyeMat);bullseye.position.set(0,spec.alt,14.5);root.add(bullseye);
     root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);
-    const targetLevel=i;root.visible=targetLevel===0;flightChallenge.targets.push({id:'challenge-target-'+(i+1),root,center:new T.Vector3(spec.x,ground+spec.alt,spec.z),quaternion:root.quaternion.clone(),alt:spec.alt,level:targetLevel,active:true,hitRadius:88});
+    const targetLevel=i;root.visible=targetLevel===0;flightChallenge.targets.push({id:'challenge-target-'+(i+1),root,center:new T.Vector3(spec.x,ground+spec.alt,spec.z),quaternion:root.quaternion.clone(),alt:spec.alt,baseAlt:spec.alt,level:targetLevel,active:true,hitRadius:88});
   }
   randomizeFlightChallengeLap();
   syncFlightChallengeLevel();
@@ -632,7 +632,7 @@ function randomizeFlightChallengeLap(){
     const ground=Math.max(height(x,z),0),alt=rand(390,540)-Math.min(difficulty*7,90);
     target.root.position.set(x,ground,z);target.root.rotation.y=Math.atan2(x-prev.x,z-prev.z);
     target.center.set(x,ground+Math.max(290,alt),z);target.quaternion.copy(target.root.quaternion);
-    target.alt=Math.max(290,alt);target.hitRadius=Math.max(42,88-difficulty*4);target.active=true;
+    target.alt=Math.max(290,alt);target.root.scale.y=target.alt/target.baseAlt;target.hitRadius=Math.max(42,88-difficulty*4);target.active=true;
     prev={x,z};
   }
   flightChallenge.nextGate=0;flightChallenge.targetsDestroyed=0;
