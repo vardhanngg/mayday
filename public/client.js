@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v65.0-room-exit-fix';
+const MAYDAY_BUILD='v66.0-room-exit-recovery';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -631,6 +631,31 @@ function goMainMenu(){
   const enforce=()=>{if(transition!==homeTransitionSeq||!roomExitInProgress||inGame||roomCode)return;forceMainMenuView()};
   requestAnimationFrame(enforce);setTimeout(enforce,100);setTimeout(enforce,450);
 }
+function enforceRoomExitHome(){
+  const apply=()=>{
+    try{forceMainMenuView()}catch(e){console.warn('MAYDAY home view recovery failed',e)}
+    const lobby=document.getElementById('lobby'),menu=document.getElementById('menu'),room=document.getElementById('room');
+    if(lobby){lobby.style.display='flex';lobby.style.visibility='visible';lobby.style.pointerEvents='auto'}
+    if(menu){menu.style.display='block';menu.style.visibility='visible'}
+    if(room)room.style.display='none';
+    for(const id of ['win','confirmDialog','settingsPanel','landscapeGate','hudEditor']){
+      const el=document.getElementById(id);if(el)el.style.display='none'
+    }
+    const win=document.getElementById('win');if(win)win.classList.remove('resultsScreen');
+  };
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply,80);
+  setTimeout(apply,260);
+  // Last-resort recovery: if another UI transition reopens the room, reload the
+  // page only when the lobby could not be restored. The server drops the old socket.
+  setTimeout(()=>{
+    apply();
+    const lobby=document.getElementById('lobby'),menu=document.getElementById('menu'),room=document.getElementById('room');
+    const homeVisible=!!lobby&&!!menu&&!!room&&getComputedStyle(lobby).display!=='none'&&getComputedStyle(menu).display!=='none'&&getComputedStyle(room).display==='none';
+    if(!homeVisible)window.location.reload();
+  },700);
+}
 function leaveRoom(reason='menu',confirmHost=true){
   let handled=false;
   const doLeave=()=>{
@@ -639,17 +664,22 @@ function leaveRoom(reason='menu',confirmHost=true){
     const leavingSocket=ws;
     // Stop routing late gameplay packets before starting the teardown.
     ws=null;
-    goMainMenu();
+    try{goMainMenu()}catch(e){
+      console.warn('MAYDAY menu reset failed while leaving room',e);
+      try{forceMainMenuView()}catch{}
+    }
     try{
-      if(leavingSocket===socialSocket&&socialSocket?.readyState===WebSocket.OPEN){
-        // The already-connected social socket doubles as the room socket for invited joins.
+      if(leavingSocket===socialSocket&&leavingSocket?.readyState===WebSocket.OPEN){
         sendSocial({t:'socialLeaveGame'});
       }else if(leavingSocket&&leavingSocket.readyState===WebSocket.OPEN){
-        leavingSocket.send(JSON.stringify({t:'leave'}));
-        leavingSocket.close(1000,'left room');
-      }else if(leavingSocket&&leavingSocket.readyState===WebSocket.CONNECTING){leavingSocket.close()}
+        try{leavingSocket.send(JSON.stringify({t:'leave'}))}catch(e){console.warn('MAYDAY leave message failed',e)}
+        try{leavingSocket.close(1000,'left room')}catch(e){console.warn('MAYDAY socket close failed',e)}
+      }else if(leavingSocket&&leavingSocket.readyState===WebSocket.CONNECTING){
+        try{leavingSocket.close()}catch(e){}
+      }
     }catch(e){console.warn('MAYDAY room leave cleanup failed',e)}
     intentionalDisconnect=false;
+    enforceRoomExitHome();
   };
   if(confirmHost&&isHost&&roomInfo&&roomInfo.state==='lobby')showConfirm('LEAVE HOST ROOM?','You are the host. Leaving will close your connection and the host role will pass to another player when possible.','LEAVE ROOM',doLeave);
   else doLeave();
