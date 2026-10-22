@@ -284,7 +284,7 @@ function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const ident
     if(!colorId)throw new Error('ALL_COLORS_TAKEN');
   }
   const color=colorId?(COLOR_BY_ID[colorId].color):'#ffffff';
-  r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:displayName,team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
+  r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:displayName,team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3,recentShots:[],recentMissileTargets:[]};
   return id}
 
 // Server-controlled simulated pilots only fill quick-match rooms; private rooms remain human-only.
@@ -690,12 +690,30 @@ wss.on('connection',ws=>{
       rcast(r,{t:'quickalert'});
       send(ws,{t:'quickalertsent',ok:true});
     }
-    else if(m.t==='shoot'){if(me.connected&&me.alive&&r.state==='playing'&&!(r.mode==='clash'&&Date.now()<(r.roundHiddenUntil||0))){me.shots=(me.shots||0)+1;rcast(r,{t:'shot',p:m.p,d:m.d,by:id,tid:m.tid||null},ws)}}
-    else if(m.t==='mfire'){const t=r.players[Number(m.tid)];const now=Date.now();const dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;const sameTeam=t&&t.team===me.team;const valid=t&&t.connected&&t.alive&&!sameTeam&&dist<=MISSILE_RANGE&&me.lockTarget===t.id&&now-me.lockSince>=3000;if(me.connected&&me.alive&&r.state==='playing'&&valid&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.missiles=(me.missiles||0)+1;rcast(r,{t:'mfire',p:m.p,d:m.d,tid:m.tid,by:id},ws);me.lockTarget=null;me.lockSince=0;me.lockLastAt=0}else if(me.connected)send(ws,{t:'err',m:'Missile launch rejected: target is out of lock range or lock is not stable.'})}
+    else if(m.t==='shoot'){const now=Date.now(),d=Array.isArray(m.d)&&m.d.length===3?m.d.map(Number):null,mag=d?Math.hypot(...d):0;if(me.connected&&me.alive&&r.state==='playing'&&d&&d.every(Number.isFinite)&&mag>.5&&mag<1.5&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.shots=(me.shots||0)+1;me.recentShots=(me.recentShots||[]).filter(x=>now-x.at<3500);me.recentShots.push({at:now,d:d.map(x=>x/mag)});if(me.recentShots.length>12)me.recentShots.shift();rcast(r,{t:'shot',p:m.p,d:m.d,by:id,tid:m.tid||null},ws)}}
+    else if(m.t==='mfire'){const t=r.players[Number(m.tid)];const now=Date.now();const dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;const sameTeam=t&&t.team===me.team;const valid=t&&t.connected&&t.alive&&!sameTeam&&dist<=MISSILE_RANGE&&me.lockTarget===t.id&&now-me.lockSince>=3000;if(me.connected&&me.alive&&r.state==='playing'&&valid&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.missiles=(me.missiles||0)+1;me.recentMissileTargets=(me.recentMissileTargets||[]).filter(x=>now-x.at<15000);me.recentMissileTargets.push({targetId:t.id,at:now});if(me.recentMissileTargets.length>4)me.recentMissileTargets.shift();rcast(r,{t:'mfire',p:m.p,d:m.d,tid:m.tid,by:id},ws);me.lockTarget=null;me.lockSince=0;me.lockLastAt=0}else if(me.connected)send(ws,{t:'err',m:'Missile launch rejected: target is out of lock range or lock is not stable.'})}
     else if(m.t==='shield'){if(me.connected&&r.mode==='clash'&&r.state==='playing'&&me.alive&&me.shields>0&&Date.now()>me.shieldUntil){me.shields--;me.shieldUses=(me.shieldUses||0)+1;me.shieldUntil=Date.now()+7000;rcast(r,{t:'shield',id, n:me.shields,until:me.shieldUntil},null)}}
     else if(m.t==='flare'){if(me.connected&&me.alive&&r.state==='playing'&&(me.flares||0)>0){me.flares--;rcast(r,{t:'flare',id,p:m.p},ws)}}
-    else if(m.t==='hit'){if(me.connected)damage(r,m.id,id,25)}
-    else if(m.t==='mhit'){if(me.connected)damage(r,id,m.by,50)}
+    else if(m.t==='hit'){
+      if(!me.connected||!me.alive||r.state!=='playing')return;
+      const victim=r.players[Number(m.id)],now=Date.now();
+      if(!victim||!victim.p||!me.p)return;
+      const delta=victim.p.map((x,i)=>x-me.p[i]),dist=Math.hypot(...delta);
+      if(!Number.isFinite(dist)||dist>6500||dist<1)return;
+      const aim=delta.map(x=>x/dist),shots=(me.recentShots||[]);
+      const shotIndex=shots.findIndex(shot=>now-shot.at<=3500&&shot.d.reduce((sum,x,i)=>sum+x*aim[i],0)>=0.45);
+      if(shotIndex<0)return;
+      shots.splice(shotIndex,1);damage(r,victim.id,id,25);
+    }
+    else if(m.t==='mhit'){
+      if(!me.connected||!me.alive||r.state!=='playing')return;
+      const attacker=r.players[Number(m.by)],now=Date.now();
+      if(!attacker||!attacker.connected||attacker.team===me.team)return;
+      const launches=attacker.recentMissileTargets||[];
+      const launchIndex=launches.findIndex(x=>x.targetId===me.id&&now-x.at<=15000);
+      if(launchIndex<0)return;
+      launches.splice(launchIndex,1);damage(r,id,attacker.id,50);
+    }
     else if(m.t==='crash'){if(me.connected&&me.alive&&r.state==='playing'&&Date.now()>me.prot+1000){if(r.mode==='ffa')ffaCrash(r,me);else if(r.mode==='survivor')survivorKill(r,me,null,id,null,true);else kill(r,id,null)}}
     else if(m.t==='lock'){
       const now=Date.now();
