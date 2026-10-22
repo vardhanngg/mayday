@@ -8,7 +8,7 @@ const net = require('node:net');
 const WebSocket = require('ws');
 
 const root = path.resolve(__dirname, '..');
-const pilotNames = new Set(require(path.join(root, 'pilot-names.json')));
+const pilotFirstNames = new Set(require(path.join(root, 'pilot-names.json')).map(name => String(name || '').trim().split(/\s+/)[0]));
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -63,10 +63,10 @@ function makeClient(url) {
   };
 }
 
-async function startServer(port, dataDir) {
+async function startServer(port, dataDir, matchmakingTimeoutMs = 1000) {
   const child = spawn(process.execPath, [path.join(root, 'server.js')], {
     cwd: root,
-    env: {...process.env, PORT: String(port), MAYDAY_DATA_DIR: dataDir, MAYDAY_MATCHMAKING_TIMEOUT_MS: '1000'},
+    env: {...process.env, PORT: String(port), MAYDAY_DATA_DIR: dataDir, MAYDAY_MATCHMAKING_TIMEOUT_MS: String(matchmakingTimeoutMs)},
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let output = '';
@@ -131,8 +131,9 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.equal(room.players.filter(p => !p.ai).length, 1);
       const simulatedNames = room.players.filter(p => p.ai).map(p => p.n);
       assert.equal(new Set(simulatedNames).size, 7, 'pilot display names should be unique in the match');
-      assert.ok(simulatedNames.every(name => pilotNames.has(name)), 'simulated pilots should draw names from the supplied 5,000-name list');
-      assert.ok(simulatedNames.every(name => !/^AI\\b/i.test(name)), 'pilot display names should not use an AI prefix');
+      assert.ok(simulatedNames.every(name => pilotFirstNames.has(name)), 'simulated pilots should draw first names from the supplied name list');
+      assert.ok(simulatedNames.every(name => !/\s/.test(name)), 'simulated pilot display names should contain only a first name');
+      assert.ok(simulatedNames.every(name => !/^AI\b/i.test(name)), 'pilot display names should not use an AI prefix');
       const firstSnap = await pilot.waitFor(m => m.t==='snap' && Object.values(m.players||{}).filter(p => p.ai).length===7);
       const botId = Object.keys(firstSnap.players).find(id => firstSnap.players[id].ai);
       const firstPosition = firstSnap.players[botId].p.slice();
@@ -142,6 +143,28 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.notDeepEqual(latestSnap.players[botId].p, firstPosition, 'AI aircraft should move server-side');
       pilot.send({t:'leave'});
       await pilot.waitFor(m => m.t==='left' && m.ok===true);
+    });
+
+
+    await t.test('a returning profile name is preserved if reconnect sends the Pilot placeholder', async () => {
+      const creator = await connect('Profile Creator');
+      creator.send({t:'socialHello', name:'Karan'});
+      const created = await creator.waitFor(m => m.t==='socialWelcome');
+      assert.equal(created.profile.name, 'Karan');
+      creator.close();
+
+      const returning = await connect('Profile Restored');
+      returning.send({t:'socialHello', name:'Pilot', profileId:created.profile.id, profileToken:created.profileToken});
+      const restored = await returning.waitFor(m => m.t==='socialWelcome');
+      assert.equal(restored.profile.name, 'Karan', 'a default client placeholder must not erase the saved profile name');
+
+      returning.send({t:'matchmake', mode:'ffa', n:'Pilot', profileId:created.profile.id, profileToken:created.profileToken, ty:'balanced'});
+      await returning.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
+      const room = await returning.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+      const human = room.players.find(p => !p.ai);
+      assert.equal(human.n, 'Karan', 'match roster should use the authenticated player name, not Pilot');
+      returning.send({t:'leave'});
+      await returning.waitFor(m => m.t==='left' && m.ok===true);
     });
 
     await t.test('Dogfight pairs queued pilots into a live room after the quiet-queue timeout', async () => {
@@ -230,6 +253,70 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
     fs.rmSync(dataDir, {recursive:true, force:true});
     if (child.exitCode !== 0 && child.exitCode !== null) {
       assert.fail('MAYDAY server failed during test cleanup. Logs: ' + getOutput());
+    }
+  }
+});
+
+test('pilots who join the same queue three seconds apart enter the same match if it has not started', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-delayed-queue-'));
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    const first = await connect();
+    first.send({t:'matchmake', mode:'ffa', n:'Vardhan', ty:'balanced'});
+    const firstSearching = await first.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa');
+    assert.equal(firstSearching.players, 1);
+
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const second = await connect();
+    second.send({t:'matchmake', mode:'ffa', n:'Anika', ty:'fighter'});
+    const secondSearching = await second.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa' && m.players===2);
+    assert.equal(secondSearching.players, 2);
+
+    const [matchedFirst, matchedSecond] = await Promise.all([
+      first.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa'),
+      second.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa')
+    ]);
+    assert.equal(matchedFirst.roomCode, matchedSecond.roomCode, 'both queued players should be assigned to the same room');
+    assert.equal(matchedFirst.players, 8);
+    assert.equal(matchedFirst.aiPlayers, 6);
+
+    const [roomFirst, roomSecond] = await Promise.all([
+      first.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing'),
+      second.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing')
+    ]);
+    assert.equal(roomFirst.code, roomSecond.code);
+    const humans = roomFirst.players.filter(p => !p.ai).map(p => p.n).sort();
+    assert.deepEqual(humans, ['Anika','Vardhan']);
+    first.send({t:'leave'});
+    second.send({t:'leave'});
+    await Promise.all([
+      first.waitFor(m => m.t==='left' && m.ok===true),
+      second.waitFor(m => m.t==='left' && m.ok===true)
+    ]);
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY server failed during delayed queue test. Logs: ' + getOutput());
     }
   }
 });
