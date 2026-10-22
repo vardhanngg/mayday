@@ -132,7 +132,8 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       const welcomeB = b.events.find(m => m.t==='welcome' && m.mode==='ffa');
       assert.ok(welcomeA?.code);
       assert.equal(welcomeA.code, welcomeB.code);
-      assert.ok(a.events.some(m => m.t==='room' && m.mode==='ffa' && m.state==='playing'));
+      const liveRoom = await a.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
+      assert.equal(liveRoom.players.length, 2);
     });
 
     await t.test('Clash Squad distributes a partial queue evenly across two teams', async () => {
@@ -165,7 +166,8 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       const welcomeA = a.events.find(m => m.t==='welcome' && m.mode==='survivor');
       const welcomeB = b.events.find(m => m.t==='welcome' && m.mode==='survivor');
       assert.equal(welcomeA.code, welcomeB.code);
-      assert.ok(a.events.some(m => m.t==='room' && m.mode==='survivor' && m.state==='playing'));
+      const liveRoom = await a.waitFor(m => m.t==='room' && m.mode==='survivor' && m.state==='playing');
+      assert.equal(liveRoom.players.length, 2);
     });
   } finally {
     for (const client of clients) client.close();
