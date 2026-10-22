@@ -368,11 +368,15 @@ test('staggered pilots are backfilled into the same live match instead of being 
     assert.equal(matchedSecond.backfill, true);
     assert.equal(matchedFirst.roomCode, seedRoom.code);
     assert.equal(matchedSecond.roomCode, seedRoom.code);
-    assert.equal(matchedFirst.aiPlayers, 5);
+    // The first confirmation is sent immediately after seating the first human;
+    // the second confirmation reflects the room after both bot seats were replaced.
+    assert.equal(matchedFirst.aiPlayers, 6);
+    assert.equal(matchedSecond.aiPlayers, 5);
 
     const firstRoom = await first.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
     const secondRoom = await second.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
     assert.equal(firstRoom.code, secondRoom.code);
+    assert.equal(firstRoom.players.filter(p => p.ai).length, 5, 'both backfills should be visible in the shared room state');
     assert.deepEqual(firstRoom.players.filter(p => !p.ai).map(p => p.n).sort(), ['Anika','Seed Pilot','Vardhan']);
 
     for (const client of [first,second,seed]) client.send({t:'leave'});
