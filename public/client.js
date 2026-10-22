@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v68.0-hide-practice-exit-on-home';
+const MAYDAY_BUILD='v69.0-full-home-hud-reset';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -600,11 +600,15 @@ function closeConfirmDialog(){
 }
 let homeTransitionSeq=0;
 function forceMainMenuView(){
+  // A home transition must never leave gameplay HUD layers visible over the lobby.
+  try{hideGameplayUi()}catch(e){console.warn('MAYDAY gameplay HUD cleanup failed',e)}
   const display=(id,value)=>{const el=document.getElementById(id);if(el)el.style.display=value};
-  // Put home in front before cleanup; closing a room should never be blocked by an overlay.
+  // Explicitly hide overlays that can remain after a Practice or room exit.
+  ['roomCodeHud','hud','landingHint','score','cross','killConfirm','lock','warn','shieldHud','spectatorHud','radar','gameSettingsBtn','exitPracticeBtn','set','killReplayBtn','hudEditBtn','mobileSettingsBtn','mobileControls','landscapeGate','hudEditor','toast'].forEach(id=>display(id,'none'));
+  // Put home in front after gameplay UI cleanup.
   display('lobby','flex');display('menu','block');display('room','none');display('joinBox','none');
-  display('win','none');display('confirmDialog','none');display('settingsPanel','none');display('exitPracticeBtn','none');
-  display('landscapeGate','none');display('hudEditor','none');
+  display('win','none');display('confirmDialog','none');display('settingsPanel','none');
+  const err=document.getElementById('err');if(err)err.textContent='';
   const win=document.getElementById('win');if(win)win.classList.remove('resultsScreen');
   const modeGrid=document.querySelector('.modeGrid');if(modeGrid)modeGrid.style.display='grid';
   display('selectedModePanel','none');display('actionRow','none');
@@ -777,7 +781,7 @@ function connect(first){
  roomExitInProgress=false;intentionalDisconnect=false;
  if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent='Connecting to MAYDAY social...';return}
  initAudio();errEl.textContent='Connecting...';roomCode='';
- setTimeout(()=>{if(!roomCode&&!joiningSocialInviteId)errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
+ setTimeout(()=>{if(ws===socket&&!roomCode&&!joiningSocialInviteId&&!practiceMode&&!inGame)errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
  pickedColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';invert=document.getElementById('inv').checked?1:-1;ptype=document.getElementById('ptype').value;maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;saveSet();
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws=socket;
  socket.onopen=()=>{if(ws!==socket){try{socket.close(1000,'superseded')}catch{}return}const outgoing=Object.assign({n:document.getElementById('name').value||'Pilot',ty:ptype,colorId:selectedColorId,profileId:socialIdentity?.id,profileToken:socialIdentity?.token},first);if(outgoing.inviteId)inviteDebug('game socket open; sending join',`id=${String(outgoing.inviteId).slice(0,8)} room=${outgoing.roomId||outgoing.code} profile=${outgoing.profileId||'MISSING'} token=${outgoing.profileToken?'present':'MISSING'}`);socket.send(JSON.stringify(outgoing))};
