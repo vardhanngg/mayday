@@ -1,6 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
 const {WebSocketServer}=require('ws');
-const BUILD_VERSION='v77.0-natural-pilot-names';
+const BUILD_VERSION='v77.1-pilot-matching-fix';
 const PORT=Number(process.env.PORT||3000),WIN_ROUNDS=6,WIN_KILLS=10,HP={fighter:75,balanced:100,heavy:150,interceptor:90,striker:175},PROT=3000,BREAK=5000,RESPAWN_DELAY=3500,RECONNECT_GRACE=600000,CLASH_STEALTH=4000,LOCK_RANGE=4200,MISSILE_RANGE=5200,LOCK_DURATION=3000,LOCK_HEARTBEAT_TIMEOUT=850;
 const PLANE_SPEED_MULT={fighter:1.15,balanced:1,heavy:.88,interceptor:1.34,striker:.82};
 const planeNormalMaxSpeed=p=>25+200*(PLANE_SPEED_MULT[p?.ty]||1);
@@ -84,6 +84,7 @@ const socialSockets=new Map(),pendingSocialInvites=new Map();
 const hashToken=t=>crypto.createHash('sha256').update(String(t||'')).digest('hex');
 function saveSocial(){try{const tmp=SOCIAL_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(socialStore,null,2));fs.renameSync(tmp,SOCIAL_FILE)}catch(e){console.error('Could not save MAYDAY social data:',e.message)}}
 function safeName(n){return String(n||'Pilot').replace(/[<>\\\"']/g,'').trim().slice(0,14)||'Pilot'}
+function preferredPlayerName(value,identity=null){const raw=String(value??'').trim();if(raw&&raw.toLocaleLowerCase()!=='pilot')return safeName(raw);return identity?.name?safeName(identity.name):safeName(raw)}
 function makeGameUid(reserved=new Set(Object.values(socialStore.profiles).map(p=>String(p.code||'')))){let uid;do{uid=String(crypto.randomInt(100000,1000000))}while(reserved.has(uid));reserved.add(uid);return uid}
 // Migrate older alphanumeric Friend Codes to six-digit numeric Game UIDs at startup.
 // Internal profile IDs remain unchanged, so accepted friendships and pending requests survive.
@@ -129,7 +130,9 @@ function handleSocialMessage(ws,m){
     let profile=null,token='';
     if(m.profileId&&m.profileToken){profile=authProfile(m.profileId,m.profileToken);token=String(m.profileToken);if(!profile){send(ws,{t:'socialAuthError'});return}}
     else {const created=createSocialProfile(m.name);profile=created.profile;token=created.token}
-    const newName=safeName(m.name||profile.name);if(profile.name!==newName){profile.name=newName;saveSocial()}
+    const suppliedName=String(m.name||'').trim();
+    const newName=suppliedName&&suppliedName.toLocaleLowerCase()!=='pilot'?safeName(suppliedName):safeName(profile.name||suppliedName);
+    if(profile.name!==newName){profile.name=newName;saveSocial()}
     const old=socialSockets.get(profile.id);if(old&&old!==ws){old._socialReplaced=true;try{old.close(4001,'social session replaced')}catch{}}
     ws.socialProfileId=profile.id;socialSockets.set(profile.id,ws);
     const active=Object.values(rooms).find(r=>roomContainsProfile(r,profile.id));
@@ -265,7 +268,7 @@ const pickMVP=ps=>ps.slice().sort((a,b)=>mvpScore(b)-mvpScore(a)||(b.kills||0)-(
 const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
 const pub=(r,p)=>({n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,c:colOf(r,p),ty:p.ty,mh:p.mh,hp:p.hp,alive:p.connected!==false&&p.alive,sc:p.sc||0,lives:p.livesRemaining,online:p.connected!==false,pr:Math.max(0,p.prot-Date.now()),rh:r.mode==='clash'?Math.max(0,(r.roundHiddenUntil||0)-Date.now()):0,sh:r.mode==='clash'?(p.shields===undefined?3:p.shields):0,su:r.mode==='clash'?Math.max(0,(p.shieldUntil||0)-Date.now()):0,p:p.p,q:p.q});
 const mkCode=()=>{let c;do{c=Math.random().toString(36).replace(/[^a-z]/g,'').slice(0,4).toUpperCase()}while(c.length<4||rooms[c]);return c};
-function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);if(identity){ws.profileId=identity.id;if(identity.name!==safeName(m.n)){identity.name=safeName(m.n);saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
+function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);const displayName=preferredPlayerName(m.n,identity);if(identity){ws.profileId=identity.id;if(identity.name!==displayName){identity.name=displayName;saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
   const cnt=t=>list(r).filter(p=>p.team===t).length;
   let team;
   if(isFFA(r)) team='p'+id;
@@ -280,27 +283,36 @@ function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const ident
     if(!colorId)throw new Error('ALL_COLORS_TAKEN');
   }
   const color=colorId?(COLOR_BY_ID[colorId].color):'#ffffff';
-  r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:String(m.n||'Pilot').slice(0,14),team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
+  r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:displayName,team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
   return id}
 
 // Server-controlled simulated pilots only fill quick-match rooms; private rooms remain human-only.
+// Display only a first name for simulated pilots. Keep names unique among active rooms when possible.
+const firstNameOnly=value=>String(value||'').trim().split(/\s+/)[0].slice(0,14);
 let pilotNamePool=[];
 try {
   const names=JSON.parse(fs.readFileSync(path.join(__dirname,'pilot-names.json'),'utf8'));
-  if(Array.isArray(names))pilotNamePool=[...new Set(names.map(n=>String(n||'').trim()).filter(n=>n&&n.length<=40))].slice(0,5000);
+  if(Array.isArray(names)){
+    const seen=new Set();
+    for(const raw of names){
+      const candidate=firstNameOnly(raw),key=candidate.toLocaleLowerCase();
+      if(candidate&&!seen.has(key)){seen.add(key);pilotNamePool.push(candidate)}
+    }
+  }
 }catch(e){console.warn('MAYDAY pilot name pool unavailable; using built-in fallback names:',e.message)}
-const FALLBACK_PILOT_NAMES=['Alex Morgan','Jordan Taylor','Sam Parker','Jamie Carter','Riley Bennett','Casey Reed','Avery Brooks','Taylor Hayes'];
+const FALLBACK_PILOT_NAMES=['Alex','Jordan','Sam','Jamie','Riley','Casey','Avery','Taylor','Morgan','Skyler'];
 function randomPilotDisplayName(){
   const used=new Set();
-  for(const activeRoom of Object.values(rooms))for(const pilot of list(activeRoom))if(pilot?.n)used.add(String(pilot.n).toLocaleLowerCase());
+  for(const activeRoom of Object.values(rooms))for(const pilot of list(activeRoom))if(pilot?.n)used.add(firstNameOnly(pilot.n).toLocaleLowerCase());
   if(pilotNamePool.length){
     for(let i=0;i<80;i++){const candidate=pilotNamePool[crypto.randomInt(pilotNamePool.length)];if(!used.has(candidate.toLocaleLowerCase()))return candidate}
     const available=pilotNamePool.filter(n=>!used.has(n.toLocaleLowerCase()));
     if(available.length)return available[crypto.randomInt(available.length)];
   }
-  let fallback=FALLBACK_PILOT_NAMES[crypto.randomInt(FALLBACK_PILOT_NAMES.length)];
-  if(!used.has(fallback.toLocaleLowerCase()))return fallback;
-  return 'Pilot '+String(1000+crypto.randomInt(9000));
+  const fallback=FALLBACK_PILOT_NAMES.filter(n=>!used.has(n.toLocaleLowerCase()));
+  if(fallback.length)return fallback[crypto.randomInt(fallback.length)];
+  for(let i=0;i<100;i++){const candidate='Sky'+crypto.randomInt(100,1000);if(!used.has(candidate.toLocaleLowerCase()))return candidate}
+  return 'Jet'+crypto.randomInt(100,1000);
 }
 function addAIPilot(r){
   const id=nextId++,valid=teamIds(r);
@@ -449,6 +461,9 @@ function createQuickMatch(mode,batch){
 }
 function backfillQueuedPilots(mode,queue,now){
   const cfg=MATCHMAKING[mode],minimumWait=Math.min(5000,Math.max(500,Math.round(cfg.timeoutMs/2)));
+  // Keep recently-arrived pilots together: do not siphon an older queued pilot into
+  // another live room while a newer pilot is still within the same backfill window.
+  if(queue.some(entry=>now-entry.queuedAt<minimumWait))return;
   for(let i=0;i<queue.length;){
     const entry=queue[i];
     if(now-entry.queuedAt<minimumWait){i++;continue}
