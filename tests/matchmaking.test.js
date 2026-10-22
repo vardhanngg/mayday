@@ -94,7 +94,7 @@ async function startServer(port, dataDir, matchmakingTimeoutMs = 1000) {
 test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Survivor, and supports cancellation', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-matchmaking-'));
-  const {child, getOutput} = await startServer(port, dataDir);
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
   const clients = [];
   const url = 'ws://127.0.0.1:' + port;
 
@@ -386,6 +386,79 @@ test('queued pilots are never backfilled into a live match and instead start a f
     fs.rmSync(dataDir, {recursive:true, force:true});
     if (child.exitCode !== 0 && child.exitCode !== null) {
       assert.fail('MAYDAY fair matchmaking test failed. Logs: ' + getOutput());
+    }
+  }
+});
+
+test('leaving cancels queued matchmaking and cleans up private rooms with host handoff', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-room-cleanup-'));
+  const {child, getOutput} = await startServer(port, dataDir, 1500);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    await t.test('explicit leave removes a player from matchmaking even if the socket stays open', async () => {
+      const queued = await connect();
+      queued.send({t:'matchmake', mode:'ffa', n:'Queue Leaver', ty:'balanced'});
+      await queued.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa');
+      queued.send({t:'leave'});
+      await queued.waitFor(m => m.t==='matchmaking' && m.status==='cancelled' && m.mode==='ffa');
+      await queued.waitFor(m => m.t==='left' && m.ok===true);
+      await new Promise(resolve => setTimeout(resolve, 1900));
+      assert.equal(queued.events.some(m => m.t==='matchmaking' && m.status==='matched'), false,
+        'a player who leaves must not be assigned to a match later');
+      queued.close();
+    });
+
+    await t.test('host leave transfers the room and the final leave removes it from the public room list', async () => {
+      const host = await connect();
+      host.send({t:'host', mode:'ffa', n:'Cleanup Host', ty:'balanced'});
+      const hostWelcome = await host.waitFor(m => m.t==='welcome' && m.mode==='ffa');
+      const code = hostWelcome.code;
+
+      const guest = await connect();
+      guest.send({t:'join', roomId:code, code, n:'Cleanup Guest', ty:'fighter'});
+      const guestWelcome = await guest.waitFor(m => m.t==='welcome' && m.code===code);
+      await guest.waitFor(m => m.t==='room' && m.code===code && m.state==='lobby' && m.players.length===2);
+
+      host.send({t:'leave'});
+      await host.waitFor(m => m.t==='left' && m.ok===true);
+      const handedOff = await guest.waitFor(m =>
+        m.t==='room' && m.code===code && m.state==='lobby' &&
+        m.host===guestWelcome.id && m.players.length===1);
+      assert.equal(handedOff.players[0].id, guestWelcome.id,
+        'the remaining player should still be in the room after host departure');
+
+      guest.send({t:'leave'});
+      await guest.waitFor(m => m.t==='left' && m.ok===true);
+      const response = await fetch('http://127.0.0.1:' + port + '/api/games');
+      assert.equal(response.status, 200);
+      const {games} = await response.json();
+      assert.equal(games.some(game => game.roomId===code), false,
+        'the room should disappear from the public list when its last human leaves');
+      host.close();
+      guest.close();
+    });
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY room cleanup test failed. Logs: ' + getOutput());
     }
   }
 });

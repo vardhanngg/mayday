@@ -230,6 +230,7 @@ function handleSocialMessage(ws,m){
     return;
   }
   if(m.t==='socialLeaveGame'){
+    removeMatchmakingEntry(ws,'cancelled','Search cancelled.');
     detachSocketFromRoom(ws);
     const leavingProfile=socialStore.profiles[ws.socialProfileId];
     if(leavingProfile){leavingProfile.status='lobby';leavingProfile.roomCode='';leavingProfile.mode='';leavingProfile.roomState='';refreshSocialNeighborhood(leavingProfile)}
@@ -609,7 +610,7 @@ wss.on('connection',ws=>{
   ws.on('error',e=>console.warn('MAYDAY WebSocket error:',e?.message||e));
   ws.on('message',raw=>{let m;try{m=JSON.parse(raw)}catch{return}
     if(typeof m.t==='string'&&m.t.startsWith('social')){handleSocialMessage(ws,m);return}
-    if(m.t==='leave'){detachSocketFromRoom(ws);const leaver=socialStore.profiles[ws.profileId];if(leaver){leaver.status='lobby';leaver.roomCode='';leaver.mode='';leaver.roomState='';refreshSocialNeighborhood(leaver)}send(ws,{t:'left',ok:true});return}
+    if(m.t==='leave'){removeMatchmakingEntry(ws,'cancelled','Search cancelled.');detachSocketFromRoom(ws);const leaver=socialStore.profiles[ws.profileId];if(leaver){leaver.status='lobby';leaver.roomCode='';leaver.mode='';leaver.roomState='';refreshSocialNeighborhood(leaver)}send(ws,{t:'left',ok:true});return}
     if(m.t==='matchmake'){queueForMatchmaking(ws,m);return}
     if(m.t==='matchmakeCancel'){if(!removeMatchmakingEntry(ws,'cancelled','Search cancelled.'))send(ws,{t:'matchmaking',status:'cancelled',mode:m.mode||'',message:'Search cancelled.'});return}
     if(ws.matchmakingEntry&&!['matchmake','matchmakeCancel'].includes(m.t))removeMatchmakingEntry(ws,'cancelled','Search cancelled.');
