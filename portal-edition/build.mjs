@@ -28,7 +28,7 @@ assert(client.includes('const PORTAL_STANDALONE=true;'), 'Could not set the Port
 
 // The portal build is single-player only. Guard backend entry points, remove startup social
 // connections, and remove the version endpoint request so no game-server request is sent.
-client = replaceOnce(client, 'function connect(first){', 'function connect(req){if(PORTAL_STANDALONE){console.warn("Online rooms are disabled in Portal Edition.");return false;}', 'multiplayer socket entry point');
+client = replaceOnce(client, 'function connect(first){', 'function connect(first){if(PORTAL_STANDALONE){console.warn("Online rooms are disabled in Portal Edition.");return false;}', 'multiplayer socket entry point');
 client = replaceOnce(client, 'function connectSocial(){', 'function connectSocial(){if(PORTAL_STANDALONE)return;', 'social socket entry point');
 const versionRequest = /fetch\('\/api\/version'.*?\n(?=document\.getElementById\('acceptSocialInvite'\))/s;
 assert(versionRequest.test(client), 'Could not find the server-version request to remove.');
