@@ -33,7 +33,7 @@ client = replaceOnce(client, 'function connectSocial(){', 'function connectSocia
 const versionRequest = /fetch\('\/api\/version'.*?\n(?=document\.getElementById\('acceptSocialInvite'\))/s;
 assert(versionRequest.test(client), 'Could not find the server-version request to remove.');
 client = client.replace(versionRequest, "const portalBuildBadge=document.getElementById('buildVersionBadge');if(portalBuildBadge)portalBuildBadge.textContent='MAYDAY · FLIGHT CHALLENGE';\n");
-client = replaceOnce(client, 'setMusic(true);setInterval(', 'setMusic(true);setInterval(', 'automatic social connection at startup');
+client = replaceOnce(client, 'setMusic(true);connectSocial();\nsetInterval(', 'setMusic(true);\nsetInterval(', 'automatic social connection at startup');
 client = client.replace(/const MAYDAY_BUILD='v74\.0-portal-edition';/, "const MAYDAY_BUILD='v74.0-portal-edition';");
 client = client.replaceAll("'/audio/", "'./audio/").replaceAll('"/audio/', '"./audio/');
 
