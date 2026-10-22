@@ -1,6 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
 const {WebSocketServer}=require('ws');
-const BUILD_VERSION='v75.0-automatic-matchmaking';
+const BUILD_VERSION='v76.0-ai-matchmaking';
 const PORT=Number(process.env.PORT||3000),WIN_ROUNDS=6,WIN_KILLS=10,HP={fighter:75,balanced:100,heavy:150,interceptor:90,striker:175},PROT=3000,BREAK=5000,RESPAWN_DELAY=3500,RECONNECT_GRACE=600000,CLASH_STEALTH=4000,LOCK_RANGE=4200,MISSILE_RANGE=5200,LOCK_DURATION=3000,LOCK_HEARTBEAT_TIMEOUT=850;
 const PLANE_SPEED_MULT={fighter:1.15,balanced:1,heavy:.88,interceptor:1.34,striker:.82};
 const planeNormalMaxSpeed=p=>25+200*(PLANE_SPEED_MULT[p?.ty]||1);
@@ -121,7 +121,7 @@ function detachSocketFromRoom(ws){
   const id=ws.id,p=r.players[id];
   if(p&&p.ws===ws){clearTimeout(p.reconnectTimer);clearTimeout(p.respawnTimer);delete r.players[id];if(r.host===id)r.host=Object.keys(r.players).length?Number(Object.keys(r.players)[0]):null}
   ws.room=null;ws.spectator=false;ws.spectatorRoom=null;delete ws.id;delete ws.sessionToken;
-  if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];broadcastGames();return}
+  if(!hasHumanPlayers(r)){clearTimeout(r.timer);for(const p of list(r)){clearTimeout(p.respawnTimer);clearTimeout(p.reconnectTimer)}delete rooms[r.code];broadcastGames();return}
   rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();
 }
 function handleSocialMessage(ws,m){
@@ -255,14 +255,15 @@ function handleSocialMessage(ws,m){
 }
 const send=(ws,o)=>ws&&ws.readyState===1&&ws.send(JSON.stringify(o));
 const list=r=>Object.values(r.players);
+const hasHumanPlayers=r=>list(r).some(p=>p.ai!==true);
 const rcast=(r,o,except)=>{for(const p of list(r))if(p.ws!==except)send(p.ws,o);for(const sws of (r.spectators||[]))if(sws!==except)send(sws,o)};
 const snapshotOf=r=>{const players={};for(const k in r.players)players[k]=pub(r,r.players[k]);return players};
 const isFFA=r=>r.mode==='ffa'||r.mode==='survivor';
 const colOf=(r,p)=>isFFA(r)?p.color:(TEAM_BY_ID[p.team]?.color||'#fff');
 const mvpScore=p=>(p.kills||0)*120+(p.damage||0)+(p.survivalBonus||0);
 const pickMVP=ps=>ps.slice().sort((a,b)=>mvpScore(b)-mvpScore(a)||(b.kills||0)-(a.kills||0)||(b.damage||0)-(a.damage||0))[0]||null;
-const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
-const pub=(r,p)=>({n:p.n,team:p.team,colorId:p.colorId,c:colOf(r,p),ty:p.ty,mh:p.mh,hp:p.hp,alive:p.connected!==false&&p.alive,sc:p.sc||0,lives:p.livesRemaining,online:p.connected!==false,pr:Math.max(0,p.prot-Date.now()),rh:r.mode==='clash'?Math.max(0,(r.roundHiddenUntil||0)-Date.now()):0,sh:r.mode==='clash'?(p.shields===undefined?3:p.shields):0,su:r.mode==='clash'?Math.max(0,(p.shieldUntil||0)-Date.now()):0,p:p.p,q:p.q});
+const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
+const pub=(r,p)=>({n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,c:colOf(r,p),ty:p.ty,mh:p.mh,hp:p.hp,alive:p.connected!==false&&p.alive,sc:p.sc||0,lives:p.livesRemaining,online:p.connected!==false,pr:Math.max(0,p.prot-Date.now()),rh:r.mode==='clash'?Math.max(0,(r.roundHiddenUntil||0)-Date.now()):0,sh:r.mode==='clash'?(p.shields===undefined?3:p.shields):0,su:r.mode==='clash'?Math.max(0,(p.shieldUntil||0)-Date.now()):0,p:p.p,q:p.q});
 const mkCode=()=>{let c;do{c=Math.random().toString(36).replace(/[^a-z]/g,'').slice(0,4).toUpperCase()}while(c.length<4||rooms[c]);return c};
 function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);if(identity){ws.profileId=identity.id;if(identity.name!==safeName(m.n)){identity.name=safeName(m.n);saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
   const cnt=t=>list(r).filter(p=>p.team===t).length;
@@ -281,11 +282,52 @@ function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const ident
   const color=colorId?(COLOR_BY_ID[colorId].color):'#ffffff';
   r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:String(m.n||'Pilot').slice(0,14),team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
   return id}
+
+// Server-controlled AI pilots are only added to quick-match rooms; private rooms remain human-only.
+const AI_CALLSIGNS=['Viper','Falcon','Raptor','Ghost','Mantis','Comet','Raven','Nomad','Cobra','Phoenix','Spectre','Orion'];
+let nextAICallsign=1;
+function addAIPilot(r){
+  const id=nextId++,valid=teamIds(r);
+  const counts=Object.fromEntries(valid.map(t=>[t,list(r).filter(p=>p.team===t).length]));
+  const team=isFFA(r)?'p'+id:valid.slice().sort((a,b)=>counts[a]-counts[b])[0];
+  const taken=new Set(list(r).map(p=>p.colorId).filter(Boolean));
+  const colorDef=COLOR_DEFS.find(c=>!taken.has(c.id))||COLOR_DEFS[(id-1)%COLOR_DEFS.length];
+  const types=['balanced','fighter','interceptor','heavy','striker'];
+  const ty=types[Math.floor(Math.random()*types.length)];
+  r.players[id]={
+    id,ws:null,profileId:null,sessionToken:null,connected:true,disconnectedAt:0,reconnectTimer:null,
+    n:'AI • '+AI_CALLSIGNS[(nextAICallsign++-1)%AI_CALLSIGNS.length],ai:true,team,colorId:colorDef.id,color:colorDef.color,ty,
+    mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,
+    respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:r.mode==='survivor'?(r.lives||1):null,eliminated:false,
+    p:[0,850,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3,
+    aiYaw:Math.random()*Math.PI*2,aiPitch:0,aiTurnDir:Math.random()<.5?-1:1,
+    aiSkill:.34+Math.random()*.24,aiNextShot:Date.now()+500+Math.random()*1100,aiTargetId:null
+  };
+  return r.players[id];
+}
+function aiHashText(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function aiSeededRand(seed){seed=((seed>>>0)^0x9e3779b9)>>>0;seed=Math.imul(seed^(seed>>>16),0x45d9f3b);seed=Math.imul(seed^(seed>>>16),0x45d9f3b);seed=(seed^(seed>>>16))>>>0;return seed/4294967296}
+const AI_SPAWN_ZONES=[{x:-5200,z:-500},{x:5200,z:500},{x:-3600,z:3900},{x:3600,z:-3900},{x:-1200,z:-5200},{x:1200,z:5200}];
+function aiQuaternion(yaw,pitch){const yh=yaw/2,ph=pitch/2,sy=Math.sin(yh),cy=Math.cos(yh),sp=Math.sin(ph),cp=Math.cos(ph);return [sp*cy,sy*cp,-sy*sp,cy*cp]}
+function aiSpawnPosition(r,p){
+  if(r.mode!=='clash'){
+    const x=(Math.random()-.5)*2400,z=(Math.random()-.5)*2400;
+    return {p:[x,450+Math.random()*650,z],yaw:Math.random()*Math.PI*2};
+  }
+  const zones=AI_SPAWN_ZONES.map((z,i)=>({...z,i})),baseSeed=aiHashText(r.code+'|CS|'+r.round);
+  for(let i=zones.length-1;i>0;i--){const j=Math.floor(aiSeededRand(baseSeed+i*7919)*(i+1));[zones[i],zones[j]]=[zones[j],zones[i]]}
+  const ti=Math.max(0,teamIds(r).indexOf(p.team)),zone=zones[ti%zones.length];
+  const seed=aiHashText(r.code+'|CS|'+r.round+'|'+p.team+'|'+p.id);
+  const a=aiSeededRand(seed)*Math.PI*2,rad=aiSeededRand(seed^0x7f4a7c15)*380+150;
+  const x=zone.x+Math.cos(a)*rad,z=zone.z+Math.sin(a)*rad;
+  return {p:[x,850,z],yaw:Math.atan2(-x,z)};
+}
+
 const queueTimeoutOverride=Number(process.env.MAYDAY_MATCHMAKING_TIMEOUT_MS)||0;
 const MATCHMAKING={
-  ffa:{target:8,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000},
-  clash:{target:8,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):25000},
-  survivor:{target:6,minPlayers:2,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000}
+  ffa:{target:8,minPlayers:1,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000},
+  clash:{target:8,minPlayers:1,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):25000},
+  survivor:{target:6,minPlayers:1,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000}
 };
 const matchmakingQueues=Object.fromEntries(Object.keys(MATCHMAKING).map(mode=>[mode,[]]));
 const matchmakingLastPublished=Object.create(null);
@@ -370,6 +412,7 @@ function createQuickMatch(mode,batch){
     for(const p of list(r)){p.ws.room=null;delete p.ws.id;send(p.ws,{t:'err',m:'Matchmaking could not seat enough pilots. Please try again.'});try{p.ws.close(1011,'matchmaking failed')}catch{}}
     delete rooms[r.code];return;
   }
+  for(let i=seated.length;i<cfg.target;i++)addAIPilot(r);
   for(const p of list(r)){
     p.sc=0;p.kills=0;p.deaths=0;p.damage=0;p.shieldUses=0;p.eliminated=false;
     p.livesRemaining=mode==='survivor'?r.lives:null;
@@ -377,7 +420,7 @@ function createQuickMatch(mode,batch){
   r.score={};
   if(mode==='clash')for(const team of activeTeams(r))r.score[team.id]=0;
   for(const {entry,id} of seated){
-    send(entry.ws,{t:'matchmaking',status:'matched',mode,players:seated.length,target:cfg.target,roomCode:r.code});
+    send(entry.ws,{t:'matchmaking',status:'matched',mode,players:list(r).length,target:cfg.target,aiPlayers:list(r).filter(p=>p.ai).length,roomCode:r.code});
     send(entry.ws,{t:'welcome',id,code:r.code,roomId:r.code,mode,session:r.players[id].sessionToken,quickMatch:true});
   }
   // Send the regular lobby snapshot first so existing clients initialize their room state,
@@ -386,7 +429,7 @@ function createQuickMatch(mode,batch){
   startRound(r);
   rcast(r,info(r));
   broadcastGames();
-  console.log('[matchmaking] started mode='+mode+' room='+r.code+' pilots='+seated.length+(seated.length<cfg.target?' (partial queue)':''));
+  console.log('[matchmaking] started mode='+mode+' room='+r.code+' humans='+seated.length+' ai='+list(r).filter(p=>p.ai).length);
 }
 function processMatchmakingQueues(now=Date.now()){
   for(const mode of Object.keys(MATCHMAKING)){
@@ -407,17 +450,17 @@ function processMatchmakingQueues(now=Date.now()){
   }
 }
 
-const spawn=p=>{p.inRound=true;p.alive=true;p.hp=p.mh;p.prot=Date.now()+PROT;p.lastSpawn=Date.now();p.shields=p.shields===undefined?3:3;p.shieldUntil=0;p.flares=3;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;p.eliminated=false};
+const spawn=(p,r=null)=>{if(p.ai&&r){const point=aiSpawnPosition(r,p);p.p=point.p;p.aiYaw=point.yaw;p.aiPitch=0;p.q=aiQuaternion(p.aiYaw,0)}p.inRound=true;p.alive=true;p.hp=p.mh;p.prot=Date.now()+PROT;p.lastSpawn=Date.now();p.shields=p.shields===undefined?3:3;p.shieldUntil=0;p.flares=3;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;p.eliminated=false};
 function startRound(r){clearTimeout(r.timer);r.round++;r.state='playing';r.roundHiddenUntil=r.mode==='clash'?Date.now()+CLASH_STEALTH:0;list(r).forEach(p=>{if(r.mode==='survivor')p.livesRemaining=r.lives||1;
   // A disconnected Clash pilot is eliminated for this round. Do not respawn an
   // offline pilot as alive/invulnerable; they can rejoin in the next round.
   if(r.mode==='clash'&&p.connected===false){p.alive=false;p.inRound=false;p.hp=0;return}
-  spawn(p)});
+  spawn(p,r)});
   rcast(r,{t:'round',n:r.round,score:r.score,mode:r.mode,lives:r.lives||1,hidden:r.mode==='clash'?CLASH_STEALTH:0,spectatorReady:true})}
 function endRound(r,win){if(r.state!=='playing')return;r.state='between';if(win)r.score[win]=(r.score[win]||0)+1;
   rcast(r,{t:'roundend',win,score:r.score,round:r.round,teams:activeTeams(r)});broadcastGames();
   r.timer=setTimeout(()=>{if(!rooms[r.code])return;
-    if(win&&r.score[win]>=WIN_ROUNDS){r.state='over';const players=list(r).map(p=>({n:p.n,c:colOf(r,p),team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,shields:p.shieldUses||0,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.team===win&&p.alive?20:0}));const teams=activeTeams(r).map(t=>({id:t.id,name:t.name,color:t.color,score:r.score[t.id]||0,kills:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.kills||0),0),damage:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.damage||0),0)})).sort((a,b)=>b.score-a.score||b.kills-a.kills||b.damage-a.damage);const mvp=pickMVP(players.filter(p=>p.team===win).length?players.filter(p=>p.team===win):players);rcast(r,{t:'matchend',mode:'clash',win,score:r.score,teams,mvp,players})}
+    if(win&&r.score[win]>=WIN_ROUNDS){r.state='over';const players=list(r).map(p=>({n:p.n,ai:p.ai===true,c:colOf(r,p),team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,shields:p.shieldUses||0,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.team===win&&p.alive?20:0}));const teams=activeTeams(r).map(t=>({id:t.id,name:t.name,color:t.color,score:r.score[t.id]||0,kills:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.kills||0),0),damage:list(r).filter(p=>p.team===t.id).reduce((a,p)=>a+(p.damage||0),0)})).sort((a,b)=>b.score-a.score||b.kills-a.kills||b.damage-a.damage);const mvp=pickMVP(players.filter(p=>p.team===win).length?players.filter(p=>p.team===win):players);rcast(r,{t:'matchend',mode:'clash',win,score:r.score,teams,mvp,players})}
     else if(list(r).length)startRound(r)},BREAK)}
 function checkRound(r){if(r.mode!=='clash'||r.state!=='playing')return;
   // Only connected pilots with positive HP count as survivors. Unexpected
@@ -427,18 +470,67 @@ function checkRound(r){if(r.mode!=='clash'||r.state!=='playing')return;
   endRound(r,remaining.length===1?remaining[0]:null)}
 function kill(r,vid,sid){const v=r.players[vid],s=r.players[sid];if(!v)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:vid})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;if(s&&s!==v)s.kills=(s.kills||0)+1;
   rcast(r,{t:'kill',victim:vid,by:s?sid:null,vn:v.n,bn:s?s.n:null,x:v.p});send(v.ws,{t:'dead',by:s?s.n:null});checkRound(r)}
-function ffaRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive)return;spawn(v);send(v.ws,{t:'respawn',by,crash})},RESPAWN_DELAY)}
+function ffaRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive)return;spawn(v,r);send(v.ws,{t:'respawn',by,crash})},RESPAWN_DELAY)}
 function ffaKill(r,v,vid,s,sid){s.sc++;s.kills=(s.kills||0)+1;v.deaths=(v.deaths||0)+1;v.alive=false;v.hp=0;v.shieldUntil=0;rcast(r,{t:'kill',victim:vid,by:sid,vn:v.n,bn:s.n,x:v.p});
-  if(s.sc>=WIN_KILLS){r.state='over';clearTimeout(v.respawnTimer);const players=list(r).map(p=>({n:p.n,c:p.color,team:p.team,sc:p.sc,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,survivalBonus:p.alive?20:0})).sort((a,b)=>b.sc-a.sc);rcast(r,{t:'matchend',mode:'ffa',win:s.n,wc:s.color,mvp:pickMVP(players),players})}
+  if(s.sc>=WIN_KILLS){r.state='over';clearTimeout(v.respawnTimer);const players=list(r).map(p=>({n:p.n,ai:p.ai===true,c:p.color,team:p.team,sc:p.sc,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,survivalBonus:p.alive?20:0})).sort((a,b)=>b.sc-a.sc);rcast(r,{t:'matchend',mode:'ffa',win:s.n,wc:s.color,mvp:pickMVP(players),players})}
   else ffaRespawnLater(r,v,s.n,false)}
 function ffaCrash(r,v){if(r.state!=='playing'||!v.alive)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:v.id})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;rcast(r,{t:'kill',victim:v.id,by:null,vn:v.n,bn:null,x:v.p});send(v.ws,{t:'dead',by:null,crash:true});ffaRespawnLater(r,v,null,true)}
-function survivorRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive||v.livesRemaining<=0)return;spawn(v);send(v.ws,{t:'respawn',by,crash,lives:v.livesRemaining,mode:'survivor'});checkSurvivor(r)},RESPAWN_DELAY)}
-function survivorEnd(r,w){if(r.state!=='playing')return;r.state='over';clearTimeout(r.timer);const winner=w;const players=list(r).map(p=>({n:p.n,c:p.color,team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,lives:p.livesRemaining||0,alive:p.alive,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.alive?80:0}));rcast(r,{t:'matchend',mode:'survivor',win:winner?winner.n:null,wc:winner?winner.color:null,lives:r.lives,mvp:pickMVP(players),players})}
+function survivorRespawnLater(r,v,by=null,crash=false){clearTimeout(v.respawnTimer);v.respawnTimer=setTimeout(()=>{if(!rooms[r.code]||r.state!=='playing'||!r.players[v.id]||v.alive||v.livesRemaining<=0)return;spawn(v,r);send(v.ws,{t:'respawn',by,crash,lives:v.livesRemaining,mode:'survivor'});checkSurvivor(r)},RESPAWN_DELAY)}
+function survivorEnd(r,w){if(r.state!=='playing')return;r.state='over';clearTimeout(r.timer);const winner=w;const players=list(r).map(p=>({n:p.n,ai:p.ai===true,c:p.color,team:p.team,kills:p.kills||0,deaths:p.deaths||0,damage:p.damage||0,lives:p.livesRemaining||0,alive:p.alive,shots:p.shots||0,missiles:p.missiles||0,flares:p.flares||0,survivalBonus:p.alive?80:0}));rcast(r,{t:'matchend',mode:'survivor',win:winner?winner.n:null,wc:winner?winner.color:null,lives:r.lives,mvp:pickMVP(players),players})}
 function checkSurvivor(r){if(r.mode!=='survivor'||r.state!=='playing')return;const eligible=list(r).filter(p=>p.livesRemaining>0);if(eligible.length!==1)return;const w=eligible[0];if(w.alive)survivorEnd(r,w)}
 function survivorKill(r,v,s,vid,sid,crash=false){if(!v||!v.alive)return;v.alive=false;v.inRound=false;v.hp=0;v.shieldUntil=0;v.deaths=(v.deaths||0)+1;if(v.lockTarget!==null&&v.lockTarget!==undefined){const oldTarget=r.players[v.lockTarget];if(oldTarget?.ws)send(oldTarget.ws,{t:'locklost',by:v.id})}v.lockTarget=null;v.lockSince=0;v.lockLastAt=0;if(s&&s!==v)s.kills=(s.kills||0)+1;v.livesRemaining=Math.max(0,(v.livesRemaining||1)-1);rcast(r,{t:'kill',victim:vid,by:sid??null,vn:v.n,bn:s?s.n:null,x:v.p,lives:v.livesRemaining});if(v.livesRemaining>0){send(v.ws,{t:'dead',by:s?s.n:null,crash,lives:v.livesRemaining});survivorRespawnLater(r,v,s?s.n:null,crash)}else{v.eliminated=true;send(v.ws,{t:'dead',by:s?s.n:null,crash,lives:0,eliminated:true});checkSurvivor(r)}}
 function damage(r,vid,sid,amt){const v=r.players[vid],s=r.players[sid],now=Date.now();
   if(r.state!=='playing'||!v||!s||!v.connected||!s.connected||!v.alive||vid===sid||v.team===s.team)return;if(now<v.prot)return;if(r.mode==='clash'&&now<(r.roundHiddenUntil||0))return;if(r.mode==='clash'&&v.shieldUntil>now)return;v.shieldUntil=0;
   const dealt=Math.min(Math.max(v.hp,0),amt);v.hp-=amt;s.damage=(s.damage||0)+dealt;if(v.hp<=0){if(r.mode==='ffa')ffaKill(r,v,vid,s,sid);else if(r.mode==='survivor')survivorKill(r,v,s,vid,sid,false);else kill(r,vid,sid)}}
+
+let lastAIPilotTick=0;
+const aiClamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const aiAngleDelta=(a,b)=>((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;
+function runAIPilots(now=Date.now()){
+  const dt=lastAIPilotTick?aiClamp((now-lastAIPilotTick)/1000,.02,.16):.1;
+  lastAIPilotTick=now;
+  for(const r of Object.values(rooms)){
+    if(r.state!=='playing')continue;
+    const active=list(r);
+    for(const bot of active){
+      if(!bot.ai||bot.connected===false||!bot.alive||!Array.isArray(bot.p))continue;
+      const targets=active.filter(p=>p.id!==bot.id&&p.connected!==false&&p.alive&&p.hp>0&&p.team!==bot.team&&Array.isArray(p.p));
+      if(!targets.length)continue;
+      const distTo=p=>Math.hypot(p.p[0]-bot.p[0],p.p[1]-bot.p[1],p.p[2]-bot.p[2]);
+      targets.sort((a,b)=>distTo(a)-distTo(b));
+      let target=targets.find(p=>p.id===bot.aiTargetId);
+      if(!target||distTo(target)>distTo(targets[0])*1.32)target=targets[0];
+      bot.aiTargetId=target.id;
+      let dx=target.p[0]-bot.p[0],dy=target.p[1]-bot.p[1],dz=target.p[2]-bot.p[2];
+      let dist=Math.max(1,Math.hypot(dx,dy,dz)),horizontal=Math.max(1,Math.hypot(dx,dz));
+      const baseYaw=Math.atan2(-dx,-dz);
+      const desiredYaw=baseYaw+(dist<1000?bot.aiTurnDir*.48:0);
+      bot.aiYaw=Number.isFinite(bot.aiYaw)?bot.aiYaw:baseYaw;
+      bot.aiPitch=Number.isFinite(bot.aiPitch)?bot.aiPitch:0;
+      bot.aiYaw+=aiClamp(aiAngleDelta(bot.aiYaw,desiredYaw),-1.7*dt,1.7*dt);
+      const desiredPitch=aiClamp(Math.atan2(dy,horizontal)*.42,-.28,.28);
+      bot.aiPitch+=aiClamp(desiredPitch-bot.aiPitch,-.48*dt,.48*dt);
+      bot.q=aiQuaternion(bot.aiYaw,bot.aiPitch);
+      const cp=Math.cos(bot.aiPitch),forward=[-Math.sin(bot.aiYaw)*cp,Math.sin(bot.aiPitch),-Math.cos(bot.aiYaw)*cp];
+      const speed=dist<700?95:dist<1800?145:185;
+      bot.p[0]=aiClamp(bot.p[0]+forward[0]*speed*dt,-6300,6300);
+      bot.p[1]=aiClamp(bot.p[1]+forward[1]*speed*dt,360,1750);
+      bot.p[2]=aiClamp(bot.p[2]+forward[2]*speed*dt,-6300,6300);
+      dx=target.p[0]-bot.p[0];dy=target.p[1]-bot.p[1];dz=target.p[2]-bot.p[2];
+      dist=Math.max(1,Math.hypot(dx,dy,dz));
+      const facing=(forward[0]*dx+forward[1]*dy+forward[2]*dz)/dist;
+      if(now>=bot.aiNextShot&&dist<3200&&facing>.36&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){
+        const direction=[dx/dist,dy/dist,dz/dist];
+        bot.shots=(bot.shots||0)+1;
+        rcast(r,{t:'shot',p:bot.p.slice(),d:direction,by:bot.id,tid:target.id});
+        const rangeFactor=Math.max(.2,1-dist/3900);
+        if(Math.random()<bot.aiSkill*rangeFactor)damage(r,target.id,bot.id,25);
+        bot.aiNextShot=now+(r.mode==='clash'?1000:760)+Math.random()*550;
+      }
+    }
+  }
+}
+
 function broadcastGames(){
   const games=Object.values(rooms).filter(r=>r.state!=='over'&&Object.keys(r.players).length>0).map(r=>({roomId:r.code,mode:r.mode,state:r.state,players:list(r).length,teams:r.teamCount||2,lives:r.lives||1,host:r.players[r.host]?.n||'Host'}));
   const msg={t:'games',games};
@@ -561,7 +653,7 @@ wss.on('connection',ws=>{
     const explicitLeave=code===1000&&String(reason||'')==='left room';
     if(explicitLeave){
       delete r.players[ws.id];clearTimeout(p.reconnectTimer);
-      if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];return}
+      if(!hasHumanPlayers(r)){clearTimeout(r.timer);for(const p of list(r)){clearTimeout(p.respawnTimer);clearTimeout(p.reconnectTimer)}delete rooms[r.code];broadcastGames();return}
       if(r.host===ws.id)r.host=+Object.keys(r.players)[0];
       rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();return;
     }
@@ -572,13 +664,15 @@ wss.on('connection',ws=>{
     // damage, so eliminate it from this round immediately and re-check the winner.
     if(r.mode==='clash'&&r.state==='playing'){p.alive=false;p.inRound=false;p.hp=0;p.lockTarget=null;p.lockSince=0;p.lockLastAt=0;checkRound(r)}
     p.reconnectTimer=setTimeout(()=>{const cur=rooms[r.code]?.players[p.id];if(!cur||cur.connected)return;delete r.players[p.id];
-      if(!list(r).length){clearTimeout(r.timer);delete rooms[r.code];broadcastGames();return}
+      if(!hasHumanPlayers(r)){clearTimeout(r.timer);for(const pl of list(r)){clearTimeout(pl.respawnTimer);clearTimeout(pl.reconnectTimer)}delete rooms[r.code];broadcastGames();return}
       if(r.host===p.id)r.host=+Object.keys(r.players)[0];rcast(r,info(r));if(r.state==='playing')checkRound(r);broadcastGames();
     },RECONNECT_GRACE);
     rcast(r,info(r));broadcastGames();});
 });
 // Keep game snapshots frequent, but send the lightweight room-list refresh once per second.
 const matchmakingTimer=setInterval(()=>processMatchmakingQueues(),500);
+const aiTimer=setInterval(runAIPilots,100);
+aiTimer.unref?.();
 const snapshotTimer=setInterval(()=>{for(const r of Object.values(rooms)){if(r.state==='playing'&&r.mode==='clash')checkRound(r);if(r.state!=='playing'&&r.state!=='between')continue;
   const players={};for(const k in r.players)players[k]=pub(r,r.players[k]);rcast(r,{t:'snap',players,score:r.score,round:r.round,state:r.state})}},50);
 const roomListTimer=setInterval(broadcastGames,1000);
@@ -586,7 +680,7 @@ const roomListTimer=setInterval(broadcastGames,1000);
 const heartbeatTimer=setInterval(()=>{for(const client of wss.clients){if(client.isAlive===false){client.terminate();continue}client.isAlive=false;try{client.ping()}catch{client.terminate()}}},25000);
 heartbeatTimer.unref?.();roomListTimer.unref?.();snapshotTimer.unref?.();
 let shuttingDown=false;
-function shutdown(signal){if(shuttingDown)return;shuttingDown=true;console.log(`MAYDAY ${signal}: shutting down gracefully`);clearInterval(heartbeatTimer);clearInterval(roomListTimer);clearInterval(snapshotTimer);clearInterval(matchmakingTimer);for(const client of wss.clients){try{send(client,{t:'serverRestarting',message:'MAYDAY server is restarting. Active rooms will end; reconnect after it is back.'});client.close(1012,'service restart')}catch{try{client.terminate()}catch{}}}const force=setTimeout(()=>{for(const client of wss.clients)try{client.terminate()}catch{}process.exit(0)},8000);force.unref?.();server.close(()=>{clearTimeout(force);process.exit(0)})}
+function shutdown(signal){if(shuttingDown)return;shuttingDown=true;console.log(`MAYDAY ${signal}: shutting down gracefully`);clearInterval(heartbeatTimer);clearInterval(roomListTimer);clearInterval(snapshotTimer);clearInterval(matchmakingTimer);clearInterval(aiTimer);for(const client of wss.clients){try{send(client,{t:'serverRestarting',message:'MAYDAY server is restarting. Active rooms will end; reconnect after it is back.'});client.close(1012,'service restart')}catch{try{client.terminate()}catch{}}}const force=setTimeout(()=>{for(const client of wss.clients)try{client.terminate()}catch{}process.exit(0)},8000);force.unref?.();server.close(()=>{clearTimeout(force);process.exit(0)})}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
 server.listen(PORT,'0.0.0.0',()=>{
   console.log(`\nMAYDAY ${BUILD_VERSION} (Dogfight + Clash Squad + Survivor) running!\n  You:      http://localhost:${PORT}\n  Health:   http://localhost:${PORT}/healthz\n  Version:  http://localhost:${PORT}/api/version\n  Data dir: ${SOCIAL_DIR}`);
