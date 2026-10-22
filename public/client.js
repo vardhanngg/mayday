@@ -600,12 +600,12 @@ function createFlightChallengeCourse(){
     const angle=Math.atan2(spec.x-spec.from.x,spec.z-spec.from.z);root.rotation.y=angle;
     const standMat=new T.MeshStandardMaterial({color:0x576977,metalness:.5,roughness:.4});
     const stand=new T.Mesh(new T.CylinderGeometry(18,26,spec.alt,12),standMat);stand.position.y=spec.alt/2;root.add(stand);
-    const frameMat=new T.MeshStandardMaterial({color:0xf1f5f8,emissive:0x302020,metalness:.2,roughness:.3});
-    const targetRing=new T.Mesh(new T.TorusGeometry(66,9,12,36),frameMat);targetRing.position.y=spec.alt;root.add(targetRing);
-    const redMat=new T.MeshStandardMaterial({color:0xff4c48,emissive:0x5b0808,metalness:.1,roughness:.35});
-    const bullseye=new T.Mesh(new T.SphereGeometry(18,16,12),redMat);bullseye.position.set(0,spec.alt,0);root.add(bullseye);
-    const dotMat=new T.MeshBasicMaterial({color:0xffd166});
-    const dot=new T.Mesh(new T.SphereGeometry(6,10,8),dotMat);dot.position.set(0,spec.alt,0);root.add(dot);
+    const boardFrameMat=new T.MeshStandardMaterial({color:0xe7edf2,metalness:.35,roughness:.4});
+    const boardFrame=new T.Mesh(new T.BoxGeometry(142,104,14),boardFrameMat);boardFrame.position.y=spec.alt;root.add(boardFrame);
+    const boardMat=new T.MeshStandardMaterial({color:0xd93636,emissive:0x3b0808,metalness:.08,roughness:.48});
+    const board=new T.Mesh(new T.BoxGeometry(122,84,8),boardMat);board.position.set(0,spec.alt,10);root.add(board);
+    const bullseyeMat=new T.MeshStandardMaterial({color:0xffd166,emissive:0x382400,metalness:.05,roughness:.5});
+    const bullseye=new T.Mesh(new T.CircleGeometry(17,24),bullseyeMat);bullseye.position.set(0,spec.alt,14.5);root.add(bullseye);
     root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);
     const targetLevel=i;root.visible=targetLevel===0;flightChallenge.targets.push({id:'challenge-target-'+(i+1),root,center:new T.Vector3(spec.x,ground+spec.alt,spec.z),quaternion:root.quaternion.clone(),alt:spec.alt,level:targetLevel,active:true,hitRadius:88});
   }
