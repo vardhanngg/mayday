@@ -94,7 +94,7 @@ async function startServer(port, dataDir, matchmakingTimeoutMs = 1000) {
 test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Survivor, and supports cancellation', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-matchmaking-'));
-  const {child, getOutput} = await startServer(port, dataDir);
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
   const clients = [];
   const url = 'ws://127.0.0.1:' + port;
 
