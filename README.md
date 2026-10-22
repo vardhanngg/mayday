@@ -5,7 +5,7 @@ MAYDAY is a browser-based 3D aircraft game with online multiplayer modes and a s
 ## Editions
 
 - **Online edition:** the existing Render-hosted multiplayer game, served by `server.js` from `public/`.
-- **Portal Edition:** a separate single-player-only build for portal testing. See [portal-edition/README.md](portal-edition/README.md). It is built from the current source, vendors Three.js and audio locally, disables backend-dependent flows, and adds the Poki SDK lifecycle integration.
+- **Portal Edition:** a separate single-player build with all five modes (Dogfight, Clash Squad, Survivor, Practice, and Flight Challenge) adapted for local AI where online rooms are unavailable. See [portal-edition/README.md](portal-edition/README.md). It vendors Three.js and audio locally, disables backend-dependent flows, and adds the Poki SDK lifecycle integration.
 
 ## Commands
 
