@@ -260,6 +260,59 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
   }
 });
 
+test('unexpected disconnect can reconnect to the same room using the saved session token', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-reconnect-'));
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    const original = await connect();
+    original.send({t:'host', mode:'ffa', n:'Reconnect Pilot', ty:'balanced'});
+    const welcome = await original.waitFor(m => m.t==='welcome' && m.mode==='ffa');
+    assert.ok(welcome.session, 'server should issue a session token');
+    const code = welcome.code;
+
+    const closed = new Promise(resolve => original.socket.once('close', resolve));
+    original.socket.close(1001, 'temporary network loss');
+    await closed;
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const resumed = await connect();
+    resumed.send({t:'reconnect', code, session:welcome.session});
+    const resumedWelcome = await resumed.waitFor(m => m.t==='welcome' && m.resumed===true);
+    assert.equal(resumedWelcome.code, code);
+    assert.equal(resumedWelcome.id, welcome.id);
+    const resumeState = await resumed.waitFor(m => m.t==='resume' && m.mode==='ffa');
+    assert.equal(resumeState.state, 'lobby');
+    await resumed.waitFor(m => m.t==='room' && m.code===code && m.players.some(p => p.id===welcome.id && p.connected!==false));
+
+    resumed.send({t:'leave'});
+    await resumed.waitFor(m => m.t==='left' && m.ok===true);
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY reconnect test failed. Logs: ' + getOutput());
+    }
+  }
+});
+
 test('pilots who join the same queue three seconds apart enter the same match if it has not started', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-delayed-queue-'));
