@@ -507,7 +507,8 @@ function processMatchmakingQueues(now=Date.now()){
     while(queue.length>=cfg.target){
       createQuickMatch(mode,queue.splice(0,cfg.target));
     }
-    if(queue.length&&queue.length<cfg.target)backfillQueuedPilots(mode,queue,now);
+    // Fair-play rule: matchmaking only assigns pilots before a match starts.
+    // Never insert queued humans into a live match with existing scores or kills.
     if(queue.length>=cfg.minPlayers&&queue[0]&&now-queue[0].queuedAt>=cfg.timeoutMs){
       createQuickMatch(mode,queue.splice(0,Math.min(cfg.target,queue.length)));
     }

@@ -189,16 +189,18 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
 
       const late = await connect('Late Arriver');
       late.send({t:'matchmake', mode:'ffa', n:'Late Arriver', ty:'balanced'});
-      const backfilled = await late.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
-      assert.equal(backfilled.backfill, true);
-      assert.equal(backfilled.roomCode, welcomeA.code);
-      assert.equal(backfilled.aiPlayers, 5);
-      await late.waitFor(m => m.t==='round' && m.mode==='ffa' && m.backfill===true);
-      const updatedRoom = await late.waitFor(m => m.t==='room' && m.code===welcomeA.code && m.state==='playing');
-      assert.equal(updatedRoom.players.length, 8);
-      assert.equal(updatedRoom.players.filter(p => p.ai).length, 5);
-      assert.equal(updatedRoom.players.filter(p => !p.ai).length, 3);
-      await Promise.all([a,b,late].map(async pilot => {
+      await late.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa');
+
+      // A live match must not accept new matchmaking players, even when AI seats remain.
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      assert.equal(late.events.some(m => m.t==='matchmaking' && m.status==='matched'), false,
+        'late arrivals must not be inserted into a match that has already started');
+      assert.equal(late.events.some(m => m.t==='welcome' && m.quickMatch), false,
+        'late arrivals must remain in the queue rather than joining a live room');
+
+      late.send({t:'matchmakeCancel', mode:'ffa'});
+      await late.waitFor(m => m.t==='matchmaking' && m.status==='cancelled');
+      await Promise.all([a,b].map(async pilot => {
         pilot.send({t:'leave'});
         await pilot.waitFor(m => m.t==='left' && m.ok===true);
       }));
@@ -323,13 +325,13 @@ test('pilots who join the same queue three seconds apart enter the same match if
 });
 
 
-test('staggered pilots are backfilled into the same live match instead of being split', async t => {
+test('queued pilots are never backfilled into a live match and instead start a fair new match', async t => {
   const port = await reservePort();
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-backfill-queue-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-fair-queue-'));
   const {child, getOutput} = await startServer(port, dataDir, 12000);
   const clients = [];
   const url = 'ws://127.0.0.1:' + port;
-  const connect = async () => {
+  const connect = async name => {
     const client = makeClient(url);
     clients.push(client);
     await client.opened;
@@ -337,51 +339,40 @@ test('staggered pilots are backfilled into the same live match instead of being 
   };
 
   try {
-    const seed = await connect();
+    const seed = await connect('Seed Pilot');
     seed.send({t:'matchmake', mode:'ffa', n:'Seed Pilot', ty:'balanced'});
     const seedMatched = await seed.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa', 17000);
     const seedRoom = await seed.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
-    assert.equal(seedRoom.players.length, 8);
     assert.equal(seedMatched.aiPlayers, 7);
 
-    const first = await connect();
+    const first = await connect('Vardhan');
     first.send({t:'matchmake', mode:'ffa', n:'Vardhan', ty:'balanced'});
     await first.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa' && m.players===1);
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const second = await connect();
+    const second = await connect('Anika');
     second.send({t:'matchmake', mode:'ffa', n:'Anika', ty:'fighter'});
     await second.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='ffa' && m.players===2);
 
-    await new Promise(resolve => setTimeout(resolve, 1100));
+    await new Promise(resolve => setTimeout(resolve, 1200));
     assert.equal(first.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
     assert.equal(second.events.some(m => m.t==='matchmaking' && m.status==='matched'), false);
-    // Wait for the second entrant to cross the 5-second backfill threshold while
-    // the older queue entry remains below its 12-second normal match timeout.
-    await new Promise(resolve => setTimeout(resolve, 4200));
 
     const [matchedFirst, matchedSecond] = await Promise.all([
-      first.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa'),
-      second.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa')
+      first.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa', 15000),
+      second.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa', 15000)
     ]);
-    assert.equal(matchedFirst.backfill, true);
-    assert.equal(matchedSecond.backfill, true);
-    assert.equal(matchedFirst.roomCode, seedRoom.code);
-    assert.equal(matchedSecond.roomCode, seedRoom.code);
-    // The first confirmation is sent immediately after seating the first human;
-    // the second confirmation reflects the room after both bot seats were replaced.
-    assert.equal(matchedFirst.aiPlayers, 6);
-    assert.equal(matchedSecond.aiPlayers, 5);
+    assert.notEqual(matchedFirst.roomCode, seedRoom.code, 'new queue must receive a fresh match, not the live room');
+    assert.equal(matchedFirst.roomCode, matchedSecond.roomCode, 'players waiting in the same queue should be grouped together');
+    assert.equal(matchedFirst.backfill, undefined);
+    assert.equal(matchedSecond.backfill, undefined);
 
-    const fullyBackfilled = m => m.t==='room' && m.mode==='ffa' && m.state==='playing' && m.players.filter(p => !p.ai).length===3;
-    const firstRoom = await first.waitFor(fullyBackfilled);
-    const secondRoom = await second.waitFor(fullyBackfilled);
-    assert.equal(firstRoom.code, secondRoom.code);
-    assert.equal(firstRoom.players.filter(p => p.ai).length, 5, 'both backfills should be visible in the shared room state');
-    assert.deepEqual(firstRoom.players.filter(p => !p.ai).map(p => p.n).sort(), ['Anika','Seed Pilot','Vardhan']);
+    const freshRoom = await first.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing' && m.code===matchedFirst.roomCode);
+    assert.equal(freshRoom.players.filter(p => !p.ai).length, 2);
+    assert.deepEqual(freshRoom.players.filter(p => !p.ai).map(p => p.n).sort(), ['Anika','Vardhan']);
 
-    for (const client of [first,second,seed]) client.send({t:'leave'});
-    await Promise.all([first,second,seed].map(client => client.waitFor(m => m.t==='left' && m.ok===true)));
+    for (const client of [first, second, seed]) client.send({t:'leave'});
+    await Promise.all([first, second, seed].map(client => client.waitFor(m => m.t==='left' && m.ok===true)));
   } finally {
     for (const client of clients) client.close();
     if (child.exitCode === null) {
@@ -394,7 +385,7 @@ test('staggered pilots are backfilled into the same live match instead of being 
     }
     fs.rmSync(dataDir, {recursive:true, force:true});
     if (child.exitCode !== 0 && child.exitCode !== null) {
-      assert.fail('MAYDAY backfill queue test failed. Logs: ' + getOutput());
+      assert.fail('MAYDAY fair matchmaking test failed. Logs: ' + getOutput());
     }
   }
 });
