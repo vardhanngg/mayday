@@ -653,10 +653,8 @@ function syncFlightChallengeLevel(){
 }
 function restartFlightChallengeRun(){
   flightChallenge.currentLevel=0;flightChallenge.nextGate=0;flightChallenge.targetsDestroyed=0;flightChallenge.finished=false;flightChallenge.startTime=performance.now();flightChallenge.score=0;flightChallenge.streak=0;flightChallenge.bestStreak=0;flightChallenge.lastHitAt=0;flightChallenge.laps=1;flightChallenge.medal='';loadFlightChallengeHighScore();
-  for(const gate of flightChallenge.gates){gate.passed=false;gate.ring.material.color.setHex(gate.level===0?0x8cffb0:0x39dff2);gate.ring.material.emissive.setHex(gate.level===0?0x13572a:0x06404e)}
-  
-  for(const target of flightChallenge.targets)target.active=true;
-  syncFlightChallengeLevel();toast('RUN RESET • START AGAIN FROM LEVEL 1');
+  randomizeFlightChallengeLap();
+  syncFlightChallengeLevel();toast('RUN RESET • NEW COURSE • START AGAIN FROM LEVEL 1');
 }
 function flightChallengeCollision(px,py,pz){
   if(!challengeMode||!plane)return null;
@@ -712,7 +710,7 @@ function startFlightChallenge(){
   roomMode='challenge';challengeMode=true;practiceMode=true;practiceDifficulty='normal';practiceKills=0;practiceRespawnAt=0;
   inGame=true;over=false;alive=true;spectatorMode=false;isHost=false;roomInfo=null;roomCode='';ws=null;myId='challenge-player';myTeam='challenge-player';snapPlayers={};shields=0;shieldUntil=0;lockId=null;lockT=0;lastMissile=performance.now()-5000;
   myColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;
-  plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();RANGE=4200;reset();createFlightChallengeCourse();
+  plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();RANGE=4200;flightChallenge.laps=1;flightChallenge.score=0;flightChallenge.streak=0;flightChallenge.bestStreak=0;flightChallenge.lastHitAt=0;flightChallenge.targetsDestroyed=0;reset();createFlightChallengeCourse();
   document.getElementById('lobby').style.display='none';showGameplayUi();document.getElementById('radar').style.display='block';winEl.style.display='none';bannerEl.textContent='';shieldHud.style.display='none';spectatorHud.style.display='none';setMusic(false);
   toast('FLIGHT CHALLENGE • FLY THROUGH RINGS · SHOOT RED TARGETS WITH F');
 }
