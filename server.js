@@ -571,7 +571,7 @@ function runAIPilots(now=Date.now()){
       let dx=target.p[0]-bot.p[0],dy=target.p[1]-bot.p[1],dz=target.p[2]-bot.p[2];
       let dist=Math.max(1,Math.hypot(dx,dy,dz)),horizontal=Math.max(1,Math.hypot(dx,dz));
       const baseYaw=Math.atan2(-dx,-dz);
-      const desiredYaw=baseYaw+(dist<1000?bot.aiTurnDir*.48:0);
+      let desiredYaw=baseYaw+(dist<1000?bot.aiTurnDir*.48:0);const edge=5600;if(Math.abs(bot.p[0])>edge||Math.abs(bot.p[2])>edge){desiredYaw=Math.atan2(-bot.p[0],bot.p[2]);bot.aiTurnDir=bot.p[0]*Math.cos(bot.aiYaw)+bot.p[2]*Math.sin(bot.aiYaw)>0?-1:1;}
       bot.aiYaw=Number.isFinite(bot.aiYaw)?bot.aiYaw:baseYaw;
       bot.aiPitch=Number.isFinite(bot.aiPitch)?bot.aiPitch:0;
       bot.aiYaw+=aiClamp(aiAngleDelta(bot.aiYaw,desiredYaw),-1.7*dt,1.7*dt);
@@ -580,9 +580,9 @@ function runAIPilots(now=Date.now()){
       bot.q=aiQuaternion(bot.aiYaw,bot.aiPitch);
       const cp=Math.cos(bot.aiPitch),forward=[-Math.sin(bot.aiYaw)*cp,Math.sin(bot.aiPitch),-Math.cos(bot.aiYaw)*cp];
       const speed=dist<700?95:dist<1800?145:185;
-      bot.p[0]=aiClamp(bot.p[0]+forward[0]*speed*dt,-6300,6300);
+      bot.p[0]=aiClamp(bot.p[0]+forward[0]*speed*dt,-6000,6000);
       bot.p[1]=aiClamp(bot.p[1]+forward[1]*speed*dt,360,1750);
-      bot.p[2]=aiClamp(bot.p[2]+forward[2]*speed*dt,-6300,6300);
+      bot.p[2]=aiClamp(bot.p[2]+forward[2]*speed*dt,-6000,6000);
       dx=target.p[0]-bot.p[0];dy=target.p[1]-bot.p[1];dz=target.p[2]-bot.p[2];
       dist=Math.max(1,Math.hypot(dx,dy,dz));
       const facing=(forward[0]*dx+forward[1]*dy+forward[2]*dz)/dist;
@@ -690,11 +690,38 @@ wss.on('connection',ws=>{
       rcast(r,{t:'quickalert'});
       send(ws,{t:'quickalertsent',ok:true});
     }
-    else if(m.t==='shoot'){const now=Date.now(),d=Array.isArray(m.d)&&m.d.length===3?m.d.map(Number):null,mag=d?Math.hypot(...d):0;if(me.connected&&me.alive&&r.state==='playing'&&d&&d.every(Number.isFinite)&&mag>.5&&mag<1.5&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.shots=(me.shots||0)+1;me.recentShots=(me.recentShots||[]).filter(x=>now-x.at<3500);me.recentShots.push({at:now,d:d.map(x=>x/mag)});if(me.recentShots.length>12)me.recentShots.shift();rcast(r,{t:'shot',p:m.p,d:m.d,by:id,tid:m.tid||null},ws)}}
+    else if(m.t==='shoot'){const now=Date.now(),d=Array.isArray(m.d)&&m.d.length===3?m.d.map(Number):null,mag=d?Math.hypot(...d):0;if(me.connected&&me.alive&&r.state==='playing'&&d&&d.every(Number.isFinite)&&mag>.5&&mag<1.5&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.shots=(me.shots||0)+1;me.recentShots=(me.recentShots||[]).filter(x=>now-x.at<3500);me.recentShots.push({at:now,d:d.map(x=>x/mag),p:Array.isArray(m.p)&&m.p.length===3&&m.p.every(Number.isFinite)?m.p.map(Number):me.p.slice()});if(me.recentShots.length>12)me.recentShots.shift();rcast(r,{t:'shot',p:m.p,d:m.d,by:id,tid:m.tid||null},ws)}}
     else if(m.t==='mfire'){const t=r.players[Number(m.tid)];const now=Date.now();const dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;const sameTeam=t&&t.team===me.team;const valid=t&&t.connected&&t.alive&&!sameTeam&&dist<=MISSILE_RANGE&&me.lockTarget===t.id&&now-me.lockSince>=3000;if(me.connected&&me.alive&&r.state==='playing'&&valid&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.missiles=(me.missiles||0)+1;me.recentMissileTargets=(me.recentMissileTargets||[]).filter(x=>now-x.at<15000);me.recentMissileTargets.push({targetId:t.id,at:now});if(me.recentMissileTargets.length>4)me.recentMissileTargets.shift();rcast(r,{t:'mfire',p:m.p,d:m.d,tid:m.tid,by:id},ws);me.lockTarget=null;me.lockSince=0;me.lockLastAt=0}else if(me.connected)send(ws,{t:'err',m:'Missile launch rejected: target is out of lock range or lock is not stable.'})}
     else if(m.t==='mfire'){const t=r.players[Number(m.tid)];const now=Date.now();const dist=t&&t.p&&me.p?Math.hypot(me.p[0]-t.p[0],me.p[1]-t.p[1],me.p[2]-t.p[2]):Infinity;const sameTeam=t&&t.team===me.team;const valid=t&&t.connected&&t.alive&&!sameTeam&&dist<=MISSILE_RANGE&&me.lockTarget===t.id&&now-me.lockSince>=3000;if(me.connected&&me.alive&&r.state==='playing'&&valid&&!(r.mode==='clash'&&now<(r.roundHiddenUntil||0))){me.missiles=(me.missiles||0)+1;me.recentMissileTargets=(me.recentMissileTargets||[]).filter(x=>now-x.at<15000);me.recentMissileTargets.push({targetId:t.id,at:now});if(me.recentMissileTargets.length>4)me.recentMissileTargets.shift();rcast(r,{t:'mfire',p:m.p,d:m.d,tid:m.tid,by:id},ws);me.lockTarget=null;me.lockSince=0;me.lockLastAt=0}else if(me.connected)send(ws,{t:'err',m:'Missile launch rejected: target is out of lock range or lock is not stable.'})}
     else if(m.t==='shield'){if(me.connected&&r.mode==='clash'&&r.state==='playing'&&me.alive&&me.shields>0&&Date.now()>me.shieldUntil){me.shields--;me.shieldUses=(me.shieldUses||0)+1;me.shieldUntil=Date.now()+7000;rcast(r,{t:'shield',id, n:me.shields,until:me.shieldUntil},null)}}
     else if(m.t==='flare'){if(me.connected&&me.alive&&r.state==='playing'&&(me.flares||0)>0){me.flares--;rcast(r,{t:'flare',id,p:m.p},ws)}}
+    else if(m.t==='botHit'){
+      if(!me.connected||!me.alive||r.state!=='playing')return;
+      const victim=r.players[Number(m.id)],now=Date.now();
+      if(!victim||victim.ai!==true||victim.connected===false||!victim.alive||victim.team===me.team||!Array.isArray(victim.p))return;
+      if(r.mode==='clash'&&now<(r.roundHiddenUntil||0))return;
+      if(m.weapon==='missile'){
+        const launches=me.recentMissileTargets||[];
+        const launchIndex=launches.findIndex(x=>x.targetId===victim.id&&now-x.at<=15000);
+        if(launchIndex<0)return;
+        launches.splice(launchIndex,1);
+        damage(r,victim.id,me.id,50);
+        return;
+      }
+      const shots=me.recentShots||[];
+      const shotIndex=shots.findIndex(shot=>{
+        if(now-shot.at>3500||!Array.isArray(shot.p)||!Array.isArray(shot.d))return false;
+        const delta=victim.p.map((x,i)=>x-shot.p[i]),dist=Math.hypot(...delta);
+        if(!Number.isFinite(dist)||dist<1||dist>6500)return false;
+        const aim=delta.map(x=>x/dist),dot=shot.d.reduce((sum,x,i)=>sum+x*aim[i],0);
+        const along=delta.reduce((sum,x,i)=>sum+x*shot.d[i],0);
+        const miss=Math.hypot(...delta.map((x,i)=>x-shot.d[i]*along));
+        return dot>=0.62&&along>0&&miss<180;
+      });
+      if(shotIndex<0)return;
+      shots.splice(shotIndex,1);
+      damage(r,victim.id,me.id,25);
+    }
     else if(m.t==='hit'){
       if(!me.connected||!me.alive||r.state!=='playing')return;
       const victim=r.players[Number(m.id)],now=Date.now();
