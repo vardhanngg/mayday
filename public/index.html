@@ -78,7 +78,8 @@ button{margin-top:16px;padding:12px 28px;font-size:1.05rem;border:1px solid rgba
 #radar{display:none}
 #roomCodeHud{position:fixed;left:16px;top:74px;z-index:6;color:#d9f5ff;font:900 13px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-shadow:0 2px 6px #000;background:rgba(4,14,25,.58);border:1px solid rgba(125,224,255,.2);padding:7px 10px;border-radius:9px;pointer-events:none;display:none;backdrop-filter:blur(4px)}
 #gameSettingsBtn{position:fixed;left:270px;top:16px;right:auto;z-index:16;display:none;min-width:116px;padding:9px 14px;font-size:.9rem;background:rgba(8,18,35,.72);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:blur(4px)}
-@media(max-width:760px){#gameSettingsBtn{left:16px;top:112px}}
+#exitPracticeBtn{position:fixed;left:430px;top:16px;z-index:16;display:none;min-width:96px;padding:9px 14px;font-size:.9rem;background:rgba(115,32,32,.88);color:#fff;border:1px solid rgba(255,170,170,.35);box-shadow:0 8px 24px rgba(0,0,0,.22);backdrop-filter:blur(4px)}
+@media(max-width:760px){#gameSettingsBtn{left:16px;top:112px}#exitPracticeBtn{left:174px;top:112px}}
 body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
 
 #openGamesPanel{margin:16px auto 4px;max-width:860px;width:min(94vw,860px);padding:14px 16px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(4,12,23,.42);text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.2)}
@@ -251,6 +252,7 @@ body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
 </style></head><body>
 <canvas id="radar" width="240" height="240"></canvas><div id="roomCodeHud"></div><div id="missileWarning"></div><div id="shieldHud"></div><div id="spectatorHud"></div><div id="hud"></div><div id="landingHint"></div><div id="score"></div><div id="toast"></div><div id="quickAlert" role="status" aria-live="assertive"></div><div id="cross"></div><button id="killReplayBtn" type="button" aria-label="Play kill replay from the killer’s point of view when available">↻ KILL REPLAY (P)</button><div id="killConfirm"><span class="killIcon">☠</span><span class="killWord">KILL</span><span class="killTarget"></span></div><div id="lock"></div><div id="warn"></div><div id="win"></div><div id="banner"></div>
 <button id="gameSettingsBtn" class="navBtn">⚙ SETTINGS</button>
+<button id="exitPracticeBtn" class="navBtn" type="button" aria-label="Exit Practice mode and return to main menu">✕ EXIT</button>
 <button id="hudEditBtn" type="button" aria-label="Customize touch control layout">☷ HUD SETTINGS</button>
 <button id="mobileSettingsBtn" type="button" aria-label="Mobile flight and performance settings">⚙ MOBILE</button>
 <div id="hudEditor" role="dialog" aria-label="Touch HUD layout editor">
@@ -307,7 +309,7 @@ body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
   </div>
 </div>
 <div id="set"><b>Sensitivity</b> (O = hide/show)<br>Up/Down <input id="sp" type="range" min=".3" max="3" step=".1" value="1"><br>Tilt A/D <input id="sr" type="range" min=".3" max="3" step=".1" value="1"><br>Turn &larr;/&rarr; <input id="sy" type="range" min=".3" max="3" step=".1" value="1"></div>
-<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v66.0-room-exit-recovery</div>
+<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v67.0-practice-exit-controls</div>
 <div id="menu"><div style="display:flex;justify-content:flex-end;max-width:920px;margin:0 auto 2px"><button id="openSettings" class="navBtn" style="margin-top:0;min-width:120px">⚙ SETTINGS</button></div>
 <div><input id="name" type="text" placeholder="Your name" maxlength="14"> <label>Plane <select id="ptype" style="padding:8px;font-size:1rem;border-radius:8px;border:0"><option value="fighter">Fighter · 75 HP · fast & agile</option><option value="balanced" selected>Balanced · 100 HP · all-round</option><option value="heavy">Heavy · 150 HP · tough, slow turns</option><option value="interceptor">Interceptor · 90 HP · very fast · sharp turns</option><option value="striker">Strike Fighter · 175 HP · heavy assault · broad wings</option></select></label> <span id="colorIntro" style="opacity:.75">Pilot color and aircraft can be changed inside the room.</span></div>
 <label style="display:block;margin:10px;font-size:1.05rem"><input type="checkbox" id="inv" style="width:18px;height:18px;vertical-align:middle"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label>
@@ -352,4 +354,4 @@ body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
 <div id="socialInviteDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="socialInviteTitle"><div class="socialInviteBox"><h3 id="socialInviteTitle">MAYDAY ROOM INVITATION</h3><p id="socialInviteText"></p><div class="socialInviteActions"><button id="declineSocialInvite" class="declineSocial">DECLINE</button><button id="acceptSocialInvite">ACCEPT & JOIN</button></div></div></div>
 <div id="confirmDialog"><div id="confirmBox"><h3 id="confirmTitle">Leave?</h3><p id="confirmText"></p><div id="confirmActions"><button id="confirmCancel">CANCEL</button><button id="confirmOk">LEAVE</button></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/client.js?v=v66.0-room-exit-recovery"></script></body></html>
+<script src="/client.js?v=v67.0-practice-exit-controls"></script></body></html>
