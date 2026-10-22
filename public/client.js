@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v75.0-automatic-matchmaking';
+const MAYDAY_BUILD='v76.0-ai-matchmaking';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1006,7 +1006,7 @@ function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try
    if(sp0){maxhp=sp0.mh||maxhp;protEnd=performance.now()+(sp0.pr||0);const nh=sp0.hp;shields=sp0.sh===undefined?shields:sp0.sh;shieldUntil=performance.now()+(sp0.su||0);if(nh<hp){const hitAmount=hp-nh;tone(180,.2,'sawtooth',.18,70);vibrateOnHit(hitAmount)}hp=nh;if(sp0.alive===false)alive=false;myColor=sp0.c||myColor}}
    for(const id in m.players){if(id==myId)continue;const s=m.players[id];let r=remotes[id];
     if(!r){r={mesh:makePlane(s.c||TC[s.team],s.ty)};r.mesh.position.fromArray(s.p);remotes[id]=r}
-    const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
+    const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.ai=s.ai===true;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
     if(!wasAlive&&s.alive===true){r.mesh.position.fromArray(s.p);r.mesh.quaternion.fromArray(s.q);r.mesh.visible=true}}
    for(const id in remotes)if(!m.players[id]){scene.remove(remotes[id].mesh);delete remotes[id]}
    if(spectatorMode){const liveIds=Object.keys(remotes).filter(id=>remotes[id]&&remotes[id].alive!==false);if(!liveIds.length){specId=null}else if(!specId||!remotes[specId]||remotes[specId].alive===false){specId=liveIds[((specIdx%liveIds.length)+liveIds.length)%liveIds.length];}updateSpectatorHud();}}
@@ -1163,7 +1163,7 @@ function updateMatchmakingUi(state='idle',data={}){
     if(join)join.style.display='none';
     matchmakingActive=true;
     const count=Number(data.players)||0,target=Number(data.target)||0,waited=Number(data.waitedSeconds)||0;
-    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'A smaller match will start soon if the queue stays quiet.':'We’ll start a smaller match if the queue is quiet.');
+    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'AI pilots will fill empty slots if the queue stays quiet.':'Real pilots get priority; AI pilots fill empty slots after the queue wait.');
     if(quick)quick.style.display='none';
     if(cancel)cancel.style.display='inline-block';
     return;
@@ -1195,7 +1195,7 @@ function cancelMatchmaking(){
   const err=document.getElementById('err');if(err)err.textContent='';
   updateMatchmakingUi('cancelled',{mode:matchmakingMode,message:'Search cancelled. Choose PLAY ONLINE to search again.'});
 }
-const MODE_META={ffa:{name:'DOGFIGHT',help:'Everyone against everyone · minimum 2 pilots · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'2–6 teams inside the room · minimum 2 pilots · one life per round · last team alive wins the round · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Everyone fights everyone · minimum 2 pilots · host chooses 1–5 lives · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
+const MODE_META={ffa:{name:'DOGFIGHT',help:'Quick match fills empty slots with server-controlled AI pilots when the queue is quiet · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'Quick match fills empty slots with AI pilots when the queue is quiet · one life per round · last team alive wins · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Quick match fills empty slots with AI pilots when the queue is quiet · host chooses 1–5 lives in private rooms · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
 function renderMatchResults(m){
  const modeName=m.mode==='clash'?'CLASH SQUAD':m.mode==='survivor'?'SURVIVOR':'DOGFIGHT';
  const players=(m.players||[]).slice();
