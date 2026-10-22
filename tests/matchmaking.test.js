@@ -8,6 +8,7 @@ const net = require('node:net');
 const WebSocket = require('ws');
 
 const root = path.resolve(__dirname, '..');
+const pilotNames = new Set(require(path.join(root, 'pilot-names.json')));
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -117,7 +118,7 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.match(cancelled.message, /cancel/i);
     });
 
-    await t.test('a solo queue becomes a full AI-filled Dogfight and AI pilots move on the server', async () => {
+    await t.test('a solo queue becomes a full Dogfight using randomized pilot names and server movement', async () => {
       const pilot = await connect('Solo Pilot');
       pilot.send({t:'matchmake', mode:'ffa', n:'Solo Pilot', ty:'balanced'});
       const matched = await pilot.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
@@ -128,6 +129,10 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       assert.equal(room.players.length, 8);
       assert.equal(room.players.filter(p => p.ai).length, 7);
       assert.equal(room.players.filter(p => !p.ai).length, 1);
+      const simulatedNames = room.players.filter(p => p.ai).map(p => p.n);
+      assert.equal(new Set(simulatedNames).size, 7, 'pilot display names should be unique in the match');
+      assert.ok(simulatedNames.every(name => pilotNames.has(name)), 'simulated pilots should draw names from the supplied 5,000-name list');
+      assert.ok(simulatedNames.every(name => !/^AI\\b/i.test(name)), 'pilot display names should not use an AI prefix');
       const firstSnap = await pilot.waitFor(m => m.t==='snap' && Object.values(m.players||{}).filter(p => p.ai).length===7);
       const botId = Object.keys(firstSnap.players).find(id => firstSnap.players[id].ai);
       const firstPosition = firstSnap.players[botId].p.slice();

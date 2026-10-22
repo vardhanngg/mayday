@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v76.0-ai-matchmaking';
+const MAYDAY_BUILD='v77.0-natural-pilot-names';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1163,7 +1163,7 @@ function updateMatchmakingUi(state='idle',data={}){
     if(join)join.style.display='none';
     matchmakingActive=true;
     const count=Number(data.players)||0,target=Number(data.target)||0,waited=Number(data.waitedSeconds)||0;
-    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'AI pilots will fill empty slots if the queue stays quiet.':'Real pilots get priority; AI pilots fill empty slots after the queue wait.');
+    if(status)status.textContent='Searching for pilots… '+count+' '+(count===1?'pilot':'pilots')+' queued'+(target?' · target '+target:'')+'. '+(waited>=10?'A match can still start if the queue stays quiet.':'Finding available pilots. Some matches may include computer-controlled pilots.');
     if(quick)quick.style.display='none';
     if(cancel)cancel.style.display='inline-block';
     return;
@@ -1195,7 +1195,7 @@ function cancelMatchmaking(){
   const err=document.getElementById('err');if(err)err.textContent='';
   updateMatchmakingUi('cancelled',{mode:matchmakingMode,message:'Search cancelled. Choose PLAY ONLINE to search again.'});
 }
-const MODE_META={ffa:{name:'DOGFIGHT',help:'Quick match fills empty slots with server-controlled AI pilots when the queue is quiet · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'Quick match fills empty slots with AI pilots when the queue is quiet · one life per round · last team alive wins · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Quick match fills empty slots with AI pilots when the queue is quiet · host chooses 1–5 lives in private rooms · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
+const MODE_META={ffa:{name:'DOGFIGHT',help:'Quick match may fill empty slots with computer-controlled pilots when the queue is quiet · respawn after each kill · first to 10 kills.'},clash:{name:'CLASH SQUAD',help:'Quick match may fill empty slots with computer-controlled pilots when the queue is quiet · one life per round · last team alive wins · 3 shields per round, 7s each.'},survivor:{name:'SURVIVOR',help:'Quick match fills empty slots with AI pilots when the queue is quiet · host chooses 1–5 lives in private rooms · last pilot remaining wins.'},practice:{name:'PRACTICE',help:'Solo training arena · moving AI target aircraft · unlimited practice · no room code.'},challenge:{name:'FLIGHT CHALLENGE',help:'Solo flight test · pass 7 arches, collect 7 flags and hit 3 fixed targets with unguided missiles · no lock-on.'}};
 function renderMatchResults(m){
  const modeName=m.mode==='clash'?'CLASH SQUAD':m.mode==='survivor'?'SURVIVOR':'DOGFIGHT';
  const players=(m.players||[]).slice();

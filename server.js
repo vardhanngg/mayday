@@ -1,6 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
 const {WebSocketServer}=require('ws');
-const BUILD_VERSION='v76.0-ai-matchmaking';
+const BUILD_VERSION='v77.0-natural-pilot-names';
 const PORT=Number(process.env.PORT||3000),WIN_ROUNDS=6,WIN_KILLS=10,HP={fighter:75,balanced:100,heavy:150,interceptor:90,striker:175},PROT=3000,BREAK=5000,RESPAWN_DELAY=3500,RECONNECT_GRACE=600000,CLASH_STEALTH=4000,LOCK_RANGE=4200,MISSILE_RANGE=5200,LOCK_DURATION=3000,LOCK_HEARTBEAT_TIMEOUT=850;
 const PLANE_SPEED_MULT={fighter:1.15,balanced:1,heavy:.88,interceptor:1.34,striker:.82};
 const planeNormalMaxSpeed=p=>25+200*(PLANE_SPEED_MULT[p?.ty]||1);
@@ -283,9 +283,25 @@ function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const ident
   r.players[id]={id,ws,profileId:identity?.id||null,sessionToken:crypto.randomBytes(18).toString('hex'),connected:true,disconnectedAt:0,reconnectTimer:null,n:String(m.n||'Pilot').slice(0,14),team,colorId,color,ty,mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:isFFA(r)&&r.mode==='survivor'?(r.lives||1):null,eliminated:false,p:[0,500,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3};
   return id}
 
-// Server-controlled AI pilots are only added to quick-match rooms; private rooms remain human-only.
-const AI_CALLSIGNS=['Viper','Falcon','Raptor','Ghost','Mantis','Comet','Raven','Nomad','Cobra','Phoenix','Spectre','Orion'];
-let nextAICallsign=1;
+// Server-controlled simulated pilots only fill quick-match rooms; private rooms remain human-only.
+let pilotNamePool=[];
+try {
+  const names=JSON.parse(fs.readFileSync(path.join(__dirname,'pilot-names.json'),'utf8'));
+  if(Array.isArray(names))pilotNamePool=[...new Set(names.map(n=>String(n||'').trim()).filter(n=>n&&n.length<=40))].slice(0,5000);
+}catch(e){console.warn('MAYDAY pilot name pool unavailable; using built-in fallback names:',e.message)}
+const FALLBACK_PILOT_NAMES=['Alex Morgan','Jordan Taylor','Sam Parker','Jamie Carter','Riley Bennett','Casey Reed','Avery Brooks','Taylor Hayes'];
+function randomPilotDisplayName(){
+  const used=new Set();
+  for(const activeRoom of Object.values(rooms))for(const pilot of list(activeRoom))if(pilot?.n)used.add(String(pilot.n).toLocaleLowerCase());
+  if(pilotNamePool.length){
+    for(let i=0;i<80;i++){const candidate=pilotNamePool[crypto.randomInt(pilotNamePool.length)];if(!used.has(candidate.toLocaleLowerCase()))return candidate}
+    const available=pilotNamePool.filter(n=>!used.has(n.toLocaleLowerCase()));
+    if(available.length)return available[crypto.randomInt(available.length)];
+  }
+  let fallback=FALLBACK_PILOT_NAMES[crypto.randomInt(FALLBACK_PILOT_NAMES.length)];
+  if(!used.has(fallback.toLocaleLowerCase()))return fallback;
+  return 'Pilot '+String(1000+crypto.randomInt(9000));
+}
 function addAIPilot(r){
   const id=nextId++,valid=teamIds(r);
   const counts=Object.fromEntries(valid.map(t=>[t,list(r).filter(p=>p.team===t).length]));
@@ -296,7 +312,7 @@ function addAIPilot(r){
   const ty=types[Math.floor(Math.random()*types.length)];
   r.players[id]={
     id,ws:null,profileId:null,sessionToken:null,connected:true,disconnectedAt:0,reconnectTimer:null,
-    n:'AI • '+AI_CALLSIGNS[(nextAICallsign++-1)%AI_CALLSIGNS.length],ai:true,team,colorId:colorDef.id,color:colorDef.color,ty,
+    n:randomPilotDisplayName(),ai:true,team,colorId:colorDef.id,color:colorDef.color,ty,
     mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,
     respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:r.mode==='survivor'?(r.lives||1):null,eliminated:false,
     p:[0,850,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3,
