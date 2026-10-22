@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v69.0-full-home-hud-reset';
+const MAYDAY_BUILD='v70.0-flight-challenge-mode';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -196,7 +196,7 @@ window.flightWorld={bases:worldBases,cities:citySites,runways:landingStrips,carr
 
 
 let lastLockSync=0;
-let plane=null,myId=null,ws=null,hp=100,throttle=.6,speed=75,camMode=0,invert=-1,alive=false,spectatorMode=false,ptype='balanced',maxhp=100,protEnd=0,myTeam='blue',roomCode='',isHost=false,roomInfo=null,score={},roundNo=0,inGame=false,specIdx=0,lastShot=0,boost=100,wasBoost=false,lastMissile=0,lastBeep=0,lastNoLock=0,lastWarnBeep=0,over=false,winEnd=0,smokeT=0,shake=0,lockId=null,lockT=0,snapPlayers={},teamCount=2,shields=3,shieldUntil=0,spectatorName='',practiceMode=false,practiceKills=0,practiceClock=0,practiceDifficulty='normal',flares=3,flareCooldown=0,missileWarningUntil=0,lastMissileWarn=0,killCamActive=false,killCamAttackerId=null,killCamUntil=0;
+let plane=null,myId=null,ws=null,hp=100,throttle=.6,speed=75,camMode=0,invert=-1,alive=false,spectatorMode=false,ptype='balanced',maxhp=100,protEnd=0,myTeam='blue',roomCode='',isHost=false,roomInfo=null,score={},roundNo=0,inGame=false,specIdx=0,lastShot=0,boost=100,wasBoost=false,lastMissile=0,lastBeep=0,lastNoLock=0,lastWarnBeep=0,over=false,winEnd=0,smokeT=0,shake=0,lockId=null,lockT=0,snapPlayers={},teamCount=2,shields=3,shieldUntil=0,spectatorName='',practiceMode=false,challengeMode=false,practiceKills=0,practiceClock=0,practiceDifficulty='normal',flares=3,flareCooldown=0,missileWarningUntil=0,lastMissileWarn=0,killCamActive=false,killCamAttackerId=null,killCamUntil=0;
 const LOCK_RANGE=4200,MISSILE_SEEKER_RANGE=4800,MISSILE_PROXIMITY=65,MISSILE_BREAK_TIME=1.35,MISSILE_SEEKER_CONE=1.05;
 let intentionalDisconnect=false,roomExitInProgress=false;
 const remotes={},bullets=[],bg=new T.CylinderGeometry(.4,.4,16,5).rotateX(Math.PI/2),bm=new T.MeshBasicMaterial({color:0xffee55});
@@ -413,7 +413,7 @@ function clashSpawn(team,round=roundNo,playerId=myId){
   return {x,z,y:h,heading};
 }
 function reset(){let x,z,y,hd;
- if(roomMode==='practice'){x=0;z=0;y=Math.max(height(x,z),0)+900;hd=0}
+ if(roomMode==='practice'||roomMode==='challenge'){x=0;z=0;y=Math.max(height(x,z),0)+900;hd=0}
  else if(roomMode==='ffa'||roomMode==='survivor'){x=(Math.random()-.5)*2400;z=(Math.random()-.5)*2400;y=Math.max(height(x,z),0)+450;hd=Math.random()*6.283}
  else{const b=clashSpawn(myTeam,roundNo,myId);x=b.x;z=b.z;y=b.y+520;hd=b.heading}
  plane.position.set(x,y,z);plane.quaternion.setFromAxisAngle(new T.Vector3(0,1,0),hd);speed=75;throttle=.6;boost=100;lockId=null;lockT=0;flares=3;flareCooldown=0;landed=false;landingStrip=null;spawnGrace=performance.now()+4000;plane.visible=true;deathCamActive=false;deathCamUntil=0;killCamActive=false;killCamAttackerId=null}
@@ -618,7 +618,7 @@ function goMainMenu(){
   // in one subsystem cannot leave the player trapped behind the room/results UI.
   roomExitInProgress=true;
   const transition=++homeTransitionSeq;
-  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;practiceKills=0;practiceRespawnAt=0;
+  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;challengeMode=false;practiceKills=0;practiceRespawnAt=0;
   roomMode='clash';roomInfo=null;roomCode='';isHost=false;specIdx=0;specId=null;snapPlayers={};
   forceMainMenuView();
   try{closeConfirmDialog()}catch(e){console.warn('MAYDAY menu: dialog cleanup failed',e)}
@@ -703,7 +703,7 @@ const COLOR_BY_ID=Object.fromEntries(COLOR_PALETTE.map(c=>[c.id,c]));
 const TN={blue:'Blue',red:'Red',green:'Green',yellow:'Yellow',purple:'Purple',orange:'Orange'};
 const TIDS=['blue','red','green','yellow','purple','orange'];
 const myCol=()=>isPersonalMode()?(COLOR_BY_ID[selectedColorId]?.color||pickedColor||'#ffffff'):(TC[myTeam]||'#ffffff');
-const isPersonalMode=()=>roomMode==='ffa'||roomMode==='survivor'||roomMode==='practice';
+const isPersonalMode=()=>roomMode==='ffa'||roomMode==='survivor'||roomMode==='practice'||roomMode==='challenge';
 const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const bannerEl=document.getElementById('banner'),errEl=document.getElementById('err');
 const bad=id=>{const r=remotes[id],now=performance.now();return !r||r.team===myTeam||r.alive===false||r.protEnd>now||r.roundHiddenUntil>now};
@@ -719,7 +719,7 @@ function clearTransientEffects(){
 function clearPracticeTargets(){
  for(const id of Object.keys(remotes)){if(String(id).startsWith('practice-')){scene.remove(remotes[id].mesh);delete remotes[id];delete snapPlayers[id]}}
 }
-function clearWorld(){for(const id in remotes){scene.remove(remotes[id].mesh);delete remotes[id]}clearPracticeTargets();clearTransientEffects();lockId=null;lockT=0;landed=false;landingStrip=null;deathCamActive=false;deathCamUntil=0}
+function clearWorld(){for(const id in remotes){scene.remove(remotes[id].mesh);delete remotes[id]}clearPracticeTargets();clearTransientEffects();clearFlightChallenge();lockId=null;lockT=0;landed=false;landingStrip=null;deathCamActive=false;deathCamUntil=0}
 function renderRoom(m){
  roomMode=m.mode||'ffa';teamCount=m.teamCount||2;const roomCodeBig=document.getElementById('roomCodeBig');if(roomCodeBig)roomCodeBig.textContent=m.code||roomCode||'----';const meRoom=m.players.find(p=>p.id===myId)||{};selectedColorId=meRoom.colorId||selectedColorId;if(meRoom.ty&&PT[meRoom.ty]){ptype=meRoom.ty;maxhp=PT[ptype].hp;hp=maxhp;const mainType=document.getElementById('ptype');if(mainType)mainType.value=ptype;}document.getElementById('rcode').textContent=m.code;
  document.getElementById('rmode').textContent=roomMode==='ffa'?'Classic Dogfight - first to 10 kills':roomMode==='survivor'?`Survivor - ${m.lives||1} lives per pilot`:`Clash Squad - ${teamCount} teams, first to 6 rounds`;
@@ -965,7 +965,7 @@ function renderMatchResults(m){
  const ab=document.getElementById('again');if(ab)ab.onclick=()=>ws.send(JSON.stringify({t:'again'}));const meb=document.getElementById('matchExit');if(meb)meb.onclick=()=>leaveRoom('game');
 }
 function startPractice(){
-  clearKillReplay();initAudio();saveSet();roomMode='practice';practiceDifficulty=document.getElementById('practiceDifficulty').value||'normal';practiceMode=true;inGame=true;over=false;alive=true;spectatorMode=false;isHost=false;roomInfo=null;roomCode='';ws=null;myId='practice-player';myTeam='practice-player';practiceKills=0;snapPlayers={};
+  clearKillReplay();initAudio();saveSet();challengeMode=false;roomMode='practice';practiceDifficulty=document.getElementById('practiceDifficulty').value||'normal';practiceMode=true;inGame=true;over=false;alive=true;spectatorMode=false;isHost=false;roomInfo=null;roomCode='';ws=null;myId='practice-player';myTeam='practice-player';practiceKills=0;snapPlayers={};
   clearWorld();if(plane){scene.remove(plane);plane=null}practiceRespawnAt=0;myColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;
   plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();shields=0;shieldUntil=0;RANGE=4000;reset();makePracticeArena();
   document.getElementById('lobby').style.display='none';showGameplayUi();document.getElementById('radar').style.display='block';winEl.style.display='none';bannerEl.textContent='';shieldHud.style.display='none';spectatorHud.style.display='none';setMusic(false);toast(`PRACTICE ARENA • ${practiceDifficulty.toUpperCase()} BOTS • ESC OR EXIT TO MAIN MENU`);
@@ -1106,7 +1106,7 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
    if(groundHit||obstacle){
     const cp=plane.position.clone();const gy=Math.max(height(cp.x,cp.z),0);cp.y=Math.max(cp.y,gy+3);
     if(roomMode==='ffa'){prepareKillReplay();explode(cp,true);createCrashFire(cp,4300);beginDeathCam(cp);alive=false;plane.visible=false;toast(obstacle?'💥 Building impact!':'💥 Crash! Fire remains for a few seconds.')}
-    else if(roomMode==='practice'){explode(cp,true);createCrashFire(cp,2800);alive=false;plane.visible=false;practiceRespawnAt=performance.now()+1800;toast(obstacle?'💥 Training crash — respawning':'💥 Training crash — respawning')}
+    else if(roomMode==='practice'||roomMode==='challenge'){explode(cp,true);createCrashFire(cp,2800);alive=false;plane.visible=false;practiceRespawnAt=performance.now()+(challengeMode?2800:1800);toast(challengeMode?'💥 Challenge crash — returning to course':'💥 Training crash — respawning')
     else{explode(cp,true);alive=false;toast(obstacle?'💥 Building impact!':'💥 Crashed! Fire remains for a few seconds.')}
     if(!practiceMode&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'crash'}))
    }
@@ -1169,7 +1169,7 @@ const mw=document.getElementById('missileWarning');if(mw){mw.style.display=(miss
   if(plane&&plane.userData.glow){const blink=.55+.45*Math.sin(now*.006);plane.userData.glow.left.material.opacity=.35+.45*blink;plane.userData.glow.right.material.opacity=.35+.45*blink;if(plane.userData.engGlow){const pulse=.72+.28*Math.sin(now*.012+speed*.01);plane.userData.engGlow[0].scale.y=.65+pulse*.7;plane.userData.engGlow[1].scale.y=.65+pulse*.7;plane.userData.engGlow[0].material.opacity=.28+pulse*.42;plane.userData.engGlow[1].material.opacity=.28+pulse*.42}}
   sky.position.copy(cam.position);skyDust.position.copy(cam.position);skyDust.rotation.y+=dt*.0007;water.material.opacity=.69+.03*Math.sin(now*.0007);
   smokeT-=dt;if(smokeT<=0){smokeT=.06;if(alive&&!spectatorMode)emitSmoke(plane,hp/maxhp*100);for(const id in remotes)if(remotes[id].alive!==false)emitSmoke(remotes[id].mesh,remotes[id].hp/(remotes[id].mh||100)*100)}
-  scoreEl.innerHTML=roomMode==='practice'?'<b>PRACTICE ARENA</b><br>DIFFICULTY: '+practiceDifficulty.toUpperCase()+'<br>DRONES DESTROYED: '+practiceKills+'<br><small>6 AI target flights · armed bots · Esc to exit</small>':roomMode==='ffa'?'<b>FIRST TO 10 KILLS</b><br>'+Object.values(snapPlayers).sort((a,b)=>(b.sc||0)-(a.sc||0)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}: ${p.sc||0}`).join('<br>'):roomMode==='survivor'?'<b>SURVIVOR</b><br>'+Object.values(snapPlayers).sort((a,b)=>(b.lives||0)-(a.lives||0)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}: ${p.lives||0} ${p.alive?'':'✕'}`).join('<br>'):`<span style="font-size:22px">${TIDS.slice(0,teamCount).map(t=>`<b style="color:${TC[t]}">${TN[t].toUpperCase()} ${score[t]||0}</b>`).join(' &nbsp;·&nbsp; ')}</span><br>Round ${roundNo} - first to 6<br>`+Object.values(snapPlayers).sort((a,b)=>(TIDS.indexOf(a.team)-TIDS.indexOf(b.team))||a.n.localeCompare(b.n)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}${p.alive?'':' &#10006;'}`).join('<br>');
+  scoreEl.innerHTML=roomMode==='challenge'?flightChallengeHudText():roomMode==='practice'?'<b>PRACTICE ARENA</b><br>DIFFICULTY: '+practiceDifficulty.toUpperCase()+'<br>DRONES DESTROYED: '+practiceKills+'<br><small>6 AI target flights · armed bots · Esc to exit</small>':roomMode==='ffa'?'<b>FIRST TO 10 KILLS</b><br>'+Object.values(snapPlayers).sort((a,b)=>(b.sc||0)-(a.sc||0)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}: ${p.sc||0}`).join('<br>'):roomMode==='survivor'?'<b>SURVIVOR</b><br>'+Object.values(snapPlayers).sort((a,b)=>(b.lives||0)-(a.lives||0)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}: ${p.lives||0} ${p.alive?'':'✕'}`).join('<br>'):`<span style="font-size:22px">${TIDS.slice(0,teamCount).map(t=>`<b style="color:${TC[t]}">${TN[t].toUpperCase()} ${score[t]||0}</b>`).join(' &nbsp;·&nbsp; ')}</span><br>Round ${roundNo} - first to 6<br>`+Object.values(snapPlayers).sort((a,b)=>(TIDS.indexOf(a.team)-TIDS.indexOf(b.team))||a.n.localeCompare(b.n)).map(p=>`<span style="color:${p.c}">&#9632;</span> ${esc(p.n)}${p.alive?'':' &#10006;'}`).join('<br>');
  }
  for(const id in remotes){const r=remotes[id];if(!r.p)continue;r.mesh.position.lerp(new T.Vector3().fromArray(r.p),.3);r.mesh.quaternion.slerp(new T.Quaternion().fromArray(r.q),.3);r.mesh.userData.prop.rotation.z+=dt*40;const nw=performance.now();r.mesh.visible=r.alive!==false&&r.roundHiddenUntil<=nw&&(!(r.protEnd>nw)||(Math.floor(nw/110)%2===0));if(r.mesh.userData.shield){r.mesh.userData.shield.visible=roomMode==='clash'&&r.alive!==false&&r.shieldUntil>nw;r.mesh.userData.shield.scale.setScalar(.95+.08*Math.sin(nw*.02))}}
  if(killReplayActive){advanceKillReplay(performance.now());sky.position.copy(cam.position);skyDust.position.copy(cam.position);if(!killReplayAttackerId)water.position.set(plane.position.x,0,plane.position.z)}
