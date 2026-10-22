@@ -1292,7 +1292,7 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
    if(groundHit||obstacle){
     const cp=plane.position.clone();const gy=Math.max(height(cp.x,cp.z),0);cp.y=Math.max(cp.y,gy+3);
     if(roomMode==='ffa'){prepareKillReplay();explode(cp,true);createCrashFire(cp,4300);beginDeathCam(cp);alive=false;plane.visible=false;toast(obstacle?'💥 Building impact!':'💥 Crash! Fire remains for a few seconds.')}
-    else if(roomMode==='practice'||roomMode==='challenge'){explode(cp,true);createCrashFire(cp,2800);alive=false;plane.visible=false;if(challengeMode)restartFlightChallengeRun();practiceRespawnAt=performance.now()+(challengeMode?2800:1800);toast(challengeMode?'💥 CRASH! ENTIRE CHALLENGE RESET':'💥 Training crash — respawning')
+    else if(roomMode==='practice'||roomMode==='challenge'){explode(cp,true);createCrashFire(cp,2800);alive=false;plane.visible=false;if(challengeMode)restartFlightChallengeRun();practiceRespawnAt=performance.now()+(challengeMode?2800:1800);toast(challengeMode?'💥 CRASH! ENTIRE CHALLENGE RESET':'💥 Training crash — respawning')}
     else{explode(cp,true);alive=false;toast(obstacle?'💥 Building impact!':'💥 Crashed! Fire remains for a few seconds.')}
     if(!practiceMode&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'crash'}))
    }
