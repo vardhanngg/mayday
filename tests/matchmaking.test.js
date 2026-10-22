@@ -157,6 +157,22 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
       const liveRoom = await a.waitFor(m => m.t==='room' && m.mode==='ffa' && m.state==='playing');
       assert.equal(liveRoom.players.length, 8);
       assert.equal(liveRoom.players.filter(p => p.ai).length, 6);
+
+      const late = await connect('Late Arriver');
+      late.send({t:'matchmake', mode:'ffa', n:'Late Arriver', ty:'balanced'});
+      const backfilled = await late.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='ffa');
+      assert.equal(backfilled.backfill, true);
+      assert.equal(backfilled.roomCode, welcomeA.code);
+      assert.equal(backfilled.aiPlayers, 5);
+      await late.waitFor(m => m.t==='round' && m.mode==='ffa' && m.backfill===true);
+      const updatedRoom = await late.waitFor(m => m.t==='room' && m.code===welcomeA.code && m.state==='playing');
+      assert.equal(updatedRoom.players.length, 8);
+      assert.equal(updatedRoom.players.filter(p => p.ai).length, 5);
+      assert.equal(updatedRoom.players.filter(p => !p.ai).length, 3);
+      await Promise.all([a,b,late].map(async pilot => {
+        pilot.send({t:'leave'});
+        await pilot.waitFor(m => m.t==='left' && m.ok===true);
+      }));
     });
 
     await t.test('Clash Squad distributes a partial queue evenly across two teams', async () => {
