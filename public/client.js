@@ -964,7 +964,7 @@ function renderRecoveryPanel(){const x=readRecovery(),panel=document.getElementB
 function connect(first){
  roomExitInProgress=false;intentionalDisconnect=false;
  if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent='Connecting to MAYDAY social...';return}
- initAudio();errEl.textContent='Connecting...';roomCode='';
+ initAudio();errEl.textContent=first?.t==='matchmake'?'':'Connecting...';roomCode='';
  setTimeout(()=>{if(ws===socket&&!roomCode&&!joiningSocialInviteId&&!practiceMode&&!inGame&&!(first?.t==='matchmake'&&matchmakingActive))errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
  pickedColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';invert=document.getElementById('inv').checked?1:-1;ptype=document.getElementById('ptype').value;maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;saveSet();
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws=socket;
@@ -1143,8 +1143,7 @@ function updateMatchmakingUi(state='idle',data={}){
   const onlineMode=['ffa','clash','survivor'].includes(mode);
   const showSearch=state==='connecting'||state==='searching'||state==='matched';
   if(modeHelp)modeHelp.style.display=showSearch?'none':'';
-  if(selectedPanel&&showSearch)selectedPanel.style.display='none';
-  else if(selectedPanel&&state==='idle'&&selectedMode)selectedPanel.style.display='block';
+  if(selectedPanel)selectedPanel.style.display=showSearch?'none':(selectedMode?'block':'none');
   if(showSearch&&err)err.textContent='';
   const elapsed=Number(data.waitedSeconds)||0;
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
