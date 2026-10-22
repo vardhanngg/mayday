@@ -260,6 +260,56 @@ test('automatic matchmaking starts Dogfight, balances Clash Squad, starts Surviv
   }
 });
 
+test('unexpected Survivor disconnect does not block the remaining pilot from winning', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-survivor-disconnect-'));
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    const host = await connect();
+    host.send({t:'host', mode:'survivor', n:'Survivor Host', ty:'balanced'});
+    const hostWelcome = await host.waitFor(m => m.t==='welcome' && m.mode==='survivor');
+
+    const guest = await connect();
+    guest.send({t:'join', roomId:hostWelcome.code, code:hostWelcome.code, n:'Disconnected Pilot', ty:'balanced'});
+    await guest.waitFor(m => m.t==='welcome' && m.code===hostWelcome.code);
+    await host.waitFor(m => m.t==='room' && m.code===hostWelcome.code && m.players.length===2);
+
+    host.send({t:'start'});
+    await host.waitFor(m => m.t==='round' && m.mode==='survivor' && m.n===1);
+
+    const closed = new Promise(resolve => guest.socket.once('close', resolve));
+    guest.socket.close(1001, 'temporary network loss');
+    await closed;
+
+    const result = await host.waitFor(m => m.t==='matchend' && m.mode==='survivor');
+    assert.equal(result.win, 'Survivor Host',
+      'a disconnected opponent must not remain eligible and block Survivor completion');
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY Survivor disconnect test failed. Logs: ' + getOutput());
+    }
+  }
+});
+
 test('combat hit reports require a recent plausible shot and cannot spoof damage', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-combat-validation-'));
