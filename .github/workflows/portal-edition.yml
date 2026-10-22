@@ -1,0 +1,43 @@
+name: Build MAYDAY Portal Edition
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - portal-edition-poki
+    paths:
+      - "public/**"
+      - "portal-edition/**"
+      - "package.json"
+      - "README.md"
+      - ".github/workflows/portal-edition.yml"
+
+jobs:
+  build-portal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout portal branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install server dependencies
+        run: npm install
+      - name: Check online edition syntax
+        run: npm run check
+      - name: Build Portal Edition
+        run: npm run build:portal
+      - name: Validate generated JavaScript
+        run: |
+          node --check portal-edition/build.mjs
+          node --check portal-edition/dist/client.js
+      - name: Package static upload folder
+        run: cd portal-edition/dist && zip -qr ../mayday-portal-edition.zip .
+      - name: Upload Portal Edition artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mayday-portal-edition
+          path: portal-edition/mayday-portal-edition.zip
+          if-no-files-found: error
+          retention-days: 14
