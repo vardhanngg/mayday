@@ -963,7 +963,7 @@ function renderRecoveryPanel(){const x=readRecovery(),panel=document.getElementB
 
 function connect(first){
  roomExitInProgress=false;intentionalDisconnect=false;
- if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent='Connecting to MAYDAY social...';return}
+ if(!socialProfile){pendingRoomConnect=first;connectSocial();errEl.textContent=first?.t==='matchmake'?'':'Connecting to MAYDAY social...';return}
  initAudio();errEl.textContent=first?.t==='matchmake'?'':'Connecting...';roomCode='';
  setTimeout(()=>{if(ws===socket&&!roomCode&&!joiningSocialInviteId&&!practiceMode&&!inGame&&!(first?.t==='matchmake'&&matchmakingActive))errEl.textContent='No answer from the game server. Make sure you replaced server.js with the NEW one, stopped the old server (Ctrl+C), ran node server.js again, and opened the page from the server address (not as a file).'},3000);
  pickedColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';invert=document.getElementById('inv').checked?1:-1;ptype=document.getElementById('ptype').value;maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;saveSet();
@@ -1131,7 +1131,7 @@ document.getElementById('friendsToggle')?.addEventListener('click',()=>setFriend
 try{const savedSidebar=localStorage.getItem('maydayFriendsSidebarOpen');setFriendsSidebarOpen(savedSidebar===null?true:savedSidebar==='1',false)}catch{setFriendsSidebarOpen(true,false)}
 
 let selectedMode='';
-let matchmakingActive=false,matchmakingMode='';
+let matchmakingActive=false,matchmakingMode='',matchmakingElapsedSeconds=0;
 function updateMatchmakingUi(state='idle',data={}){
   const panel=document.getElementById('matchmakingPanel'),status=document.getElementById('matchmakingStatus');
   const quick=document.getElementById('quickMatch'),cancel=document.getElementById('cancelMatchmaking');
@@ -1145,10 +1145,13 @@ function updateMatchmakingUi(state='idle',data={}){
   if(modeHelp)modeHelp.style.display=showSearch?'none':'';
   if(selectedPanel)selectedPanel.style.display=showSearch?'none':(selectedMode?'block':'none');
   if(showSearch&&err)err.textContent='';
-  const elapsed=Number(data.waitedSeconds)||0;
+  if(state==='connecting')matchmakingElapsedSeconds=0;
+  else if(data.waitedSeconds!==undefined&&Number.isFinite(Number(data.waitedSeconds)))matchmakingElapsedSeconds=Math.max(0,Number(data.waitedSeconds));
+  const elapsed=matchmakingElapsedSeconds;
   const elapsedLabel=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
   if(state==='idle'){
     matchmakingActive=false;
+    matchmakingElapsedSeconds=0;
     if(panel)panel.style.display='none';
     if(cancel)cancel.style.display='none';
     if(quick)quick.style.display=onlineMode?'inline-block':'none';
