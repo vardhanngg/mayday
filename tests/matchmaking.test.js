@@ -310,6 +310,71 @@ test('unexpected Survivor disconnect does not block the remaining pilot from win
   }
 });
 
+test('combat hit reports require a recent plausible shot and cannot spoof damage', async t => {
+  const port = await reservePort();
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-combat-validation-'));
+  const {child, getOutput} = await startServer(port, dataDir, 5000);
+  const clients = [];
+  const url = 'ws://127.0.0.1:' + port;
+  const connect = async () => {
+    const client = makeClient(url);
+    clients.push(client);
+    await client.opened;
+    return client;
+  };
+
+  try {
+    const attacker = await connect();
+    attacker.send({t:'host', mode:'ffa', n:'Attacker', ty:'balanced'});
+    const aw = await attacker.waitFor(m => m.t==='welcome' && m.mode==='ffa');
+    const victim = await connect();
+    victim.send({t:'join', roomId:aw.code, code:aw.code, n:'Victim', ty:'balanced'});
+    const vw = await victim.waitFor(m => m.t==='welcome' && m.code===aw.code);
+    await attacker.waitFor(m => m.t==='room' && m.code===aw.code && m.players.length===2);
+
+    attacker.send({t:'start'});
+    await attacker.waitFor(m => m.t==='round' && m.mode==='ffa' && m.n===1);
+    attacker.send({t:'s', p:[0,500,0], q:[0,0,0,1]});
+    victim.send({t:'s', p:[0,500,1000], q:[0,0,0,1]});
+    await new Promise(resolve => setTimeout(resolve, 3200));
+
+    const before = attacker.events.filter(m => m.t==='snap' && m.players && m.players[vw.id]).at(-1);
+    const beforeHp = before.players[vw.id].hp;
+    attacker.send({t:'hit', id:vw.id});
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const afterSpoof = attacker.events.filter(m => m.t==='snap' && m.players && m.players[vw.id]).at(-1);
+    assert.equal(afterSpoof.players[vw.id].hp, beforeHp,
+      'a hit report without a recent shot must not apply damage');
+
+    attacker.send({t:'shoot', p:[0,500,0], d:[0,0,1]});
+    attacker.send({t:'hit', id:vw.id});
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const afterShot = attacker.events.filter(m => m.t==='snap' && m.players && m.players[vw.id]).at(-1);
+    assert.equal(afterShot.players[vw.id].hp, beforeHp-25,
+      'a plausible recent shot should still damage the target');
+    attacker.send({t:'leave'});
+    victim.send({t:'leave'});
+    await Promise.all([
+      attacker.waitFor(m => m.t==='left' && m.ok===true),
+      victim.waitFor(m => m.t==='left' && m.ok===true)
+    ]);
+  } finally {
+    for (const client of clients) client.close();
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await Promise.race([
+        new Promise(resolve => child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+      if (child.exitCode === null) child.kill('SIGKILL');
+    }
+    fs.rmSync(dataDir, {recursive:true, force:true});
+    if (child.exitCode !== 0 && child.exitCode !== null) {
+      assert.fail('MAYDAY combat validation test failed. Logs: ' + getOutput());
+    }
+  }
+});
+
 test('unexpected disconnect can reconnect to the same room using the saved session token', async t => {
   const port = await reservePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mayday-reconnect-'));
