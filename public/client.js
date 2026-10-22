@@ -691,7 +691,7 @@ function updateFlightChallenge(px,py,pz,now){
   const gatesDone=level.gates.every(i=>flightChallenge.gates[i]?.passed),targetsDone=level.targets.every(i=>!flightChallenge.targets[i]?.active);
   if(gatesDone&&targetsDone){
     if(flightChallenge.currentLevel<FLIGHT_CHALLENGE_LEVELS.length-1){flightChallenge.currentLevel++;syncFlightChallengeLevel();const next=FLIGHT_CHALLENGE_LEVELS[flightChallenge.currentLevel];toast('LEVEL '+(flightChallenge.currentLevel+1)+' UNLOCKED • '+next.name)}
-    else{const elapsed=(now-flightChallenge.startTime)/1000;const medal=elapsed<150?'GOLD':elapsed<240?'SILVER':'BRONZE';flightChallenge.score+=elapsed<150?1000:elapsed<240?500:0;flightChallenge.laps++;flightChallenge.currentLevel=0;randomizeFlightChallengeLap();saveFlightChallengeHighScore();syncFlightChallengeLevel();toast('LAP COMPLETE • '+medal+' TIME • LAP '+flightChallenge.laps+' STARTED • SCORE '+flightChallenge.score);}
+    else{const elapsed=(now-flightChallenge.startTime)/1000;const medal=elapsed<150?'GOLD':elapsed<240?'SILVER':'BRONZE';flightChallenge.score+=elapsed<150?1000:elapsed<240?500:0;flightChallenge.laps++;flightChallenge.currentLevel=0;flightChallenge.startTime=now;randomizeFlightChallengeLap();saveFlightChallengeHighScore();syncFlightChallengeLevel();toast('LAP COMPLETE • '+medal+' TIME • LAP '+flightChallenge.laps+' STARTED • SCORE '+flightChallenge.score);}
   }
 }
 function flightChallengeHudText(){
