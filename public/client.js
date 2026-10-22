@@ -970,7 +970,27 @@ function connect(first){
  const socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws=socket;
  socket.onopen=()=>{if(ws!==socket){try{socket.close(1000,'superseded')}catch{}return}const outgoing=Object.assign({n:document.getElementById('name').value||'Pilot',ty:ptype,colorId:selectedColorId,profileId:socialIdentity?.id,profileToken:socialIdentity?.token},first);if(outgoing.inviteId)inviteDebug('game socket open; sending join',`id=${String(outgoing.inviteId).slice(0,8)} room=${outgoing.roomId||outgoing.code} profile=${outgoing.profileId||'MISSING'} token=${outgoing.profileToken?'present':'MISSING'}`);socket.send(JSON.stringify(outgoing))};
  socket.onerror=()=>{if(ws!==socket)return;inviteDebug('game socket error',`host=${location.host} invite=${String(first?.inviteId||'').slice(0,8)||'-'}`);errEl.textContent='Could not reach the server.';if(first?.t==='matchmake')updateMatchmakingUi('error',{mode:first.mode,message:'Could not reach the matchmaking server.'});if(joiningSocialInviteId)finishSocialInviteJoin(false,'','Could not connect to the game server.')};
- socket.onclose=()=>{if(ws!==socket)return;if(first?.t==='matchmake'&&!roomCode&&matchmakingActive)updateMatchmakingUi('error',{mode:first.mode,message:'Connection to matchmaking was lost. Please search again.'});if(joiningSocialInviteId&&!roomCode)finishSocialInviteJoin(false,'','The game connection closed before joining the room.');if(!intentionalDisconnect){toast('Disconnected from server');reportSocialStatus('lobby')}intentionalDisconnect=false};
+ socket.onclose=()=>{
+   if(ws!==socket)return;
+   const expectedClose=intentionalDisconnect;
+   const wasSearching=first?.t==='matchmake'&&!roomCode&&matchmakingActive;
+   const hadRoom=!!roomCode;
+   if(joiningSocialInviteId&&!roomCode)finishSocialInviteJoin(false,'','The game connection closed before joining the room.');
+   if(hadRoom&&!expectedClose){
+     // Preserve the session token before clearing the stale socket reference.
+     // A lost game connection must not leave the player stuck on a dead game screen.
+     saveRecoverySession();
+     ws=null;
+     try{goMainMenu()}catch(e){console.warn('MAYDAY home recovery after disconnect failed',e);try{forceMainMenuView()}catch{}}
+     renderRecoveryPanel();
+     toast('Connection lost. You are back at the main menu. Use CONTINUE LAST GAME to reconnect.');
+   }else{
+     ws=null;
+     if(wasSearching)updateMatchmakingUi('error',{mode:first.mode,message:'Connection to matchmaking was lost. Please search again.'});
+     if(!expectedClose){toast('Disconnected from server');reportSocialStatus('lobby')}
+   }
+   intentionalDisconnect=false;
+ };
  socket.onmessage=e=>handleGameMessage(socket,first,e.data);
 }
 function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try{m=JSON.parse(rawData)}catch{return}const isReconnect=first?.t==='reconnect';
