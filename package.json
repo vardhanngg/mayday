@@ -1,6 +1,6 @@
 {
   "name": "flight-battle",
-  "version": "77.0.0",
+  "version": "77.1.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,5 +13,5 @@
   "engines": {
     "node": ">=20"
   },
-  "description": "MAYDAY browser-based 3D aircraft game with natural matchmaking and randomized pilot names"
+  "description": "MAYDAY browser-based 3D aircraft game with first-name pilot identities and improved matchmaking"
 }
