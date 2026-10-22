@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v67.0-practice-exit-controls';
+const MAYDAY_BUILD='v68.0-hide-practice-exit-on-home';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -603,7 +603,7 @@ function forceMainMenuView(){
   const display=(id,value)=>{const el=document.getElementById(id);if(el)el.style.display=value};
   // Put home in front before cleanup; closing a room should never be blocked by an overlay.
   display('lobby','flex');display('menu','block');display('room','none');display('joinBox','none');
-  display('win','none');display('confirmDialog','none');display('settingsPanel','none');
+  display('win','none');display('confirmDialog','none');display('settingsPanel','none');display('exitPracticeBtn','none');
   display('landscapeGate','none');display('hudEditor','none');
   const win=document.getElementById('win');if(win)win.classList.remove('resultsScreen');
   const modeGrid=document.querySelector('.modeGrid');if(modeGrid)modeGrid.style.display='grid';
@@ -638,7 +638,7 @@ function enforceRoomExitHome(){
     if(lobby){lobby.style.display='flex';lobby.style.visibility='visible';lobby.style.pointerEvents='auto'}
     if(menu){menu.style.display='block';menu.style.visibility='visible'}
     if(room)room.style.display='none';
-    for(const id of ['win','confirmDialog','settingsPanel','landscapeGate','hudEditor']){
+    for(const id of ['win','confirmDialog','settingsPanel','landscapeGate','hudEditor','exitPracticeBtn']){
       const el=document.getElementById(id);if(el)el.style.display='none'
     }
     const win=document.getElementById('win');if(win)win.classList.remove('resultsScreen');
@@ -684,7 +684,7 @@ function leaveRoom(reason='menu',confirmHost=true){
   if(confirmHost&&isHost&&roomInfo&&roomInfo.state==='lobby')showConfirm('LEAVE HOST ROOM?','You are the host. Leaving will close your connection and the host role will pass to another player when possible.','LEAVE ROOM',doLeave);
   else doLeave();
 }
-function exitActiveMatch(){if(!inGame)return;if(practiceMode){goMainMenu()}else leaveRoom('game',false)}
+function exitActiveMatch(){if(!inGame)return;if(practiceMode){goMainMenu();const exitButton=document.getElementById('exitPracticeBtn');if(exitButton)exitButton.style.display='none'}else leaveRoom('game',false)}
 const TC={blue:'#2a6fe0',red:'#e03030',green:'#20b85a',yellow:'#f1c40f',purple:'#9b59b6',orange:'#f39c12'};
 const COLOR_PALETTE=[
  {id:'electric-red',name:'Electric Red',color:'#FF3B30'},{id:'vermilion',name:'Vermilion',color:'#FF6B00'},
