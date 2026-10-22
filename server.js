@@ -394,7 +394,7 @@ function createQuickMatch(mode,batch){
     for(const modeName of Object.keys(matchmakingQueues))publishMatchmakingQueue(modeName,Date.now(),true);
     return;
   }
-  const r={code:mkCode(),mode,teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null,quickMatch:true};
+  const r={code:mkCode(),mode,teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null,quickMatch:true,startedAt:Date.now(),aiBackfillUntil:Date.now()+90000};
   if(mode==='clash')for(const team of activeTeams(r))r.score[team.id]=0;
   rooms[r.code]=r;
   const seated=[];
@@ -431,6 +431,39 @@ function createQuickMatch(mode,batch){
   broadcastGames();
   console.log('[matchmaking] started mode='+mode+' room='+r.code+' humans='+seated.length+' ai='+list(r).filter(p=>p.ai).length);
 }
+function backfillQueuedPilots(mode,queue,now){
+  const cfg=MATCHMAKING[mode],minimumWait=Math.min(5000,Math.max(500,Math.round(cfg.timeoutMs/2)));
+  for(let i=0;i<queue.length;){
+    const entry=queue[i];
+    if(now-entry.queuedAt<minimumWait){i++;continue}
+    const room=Object.values(rooms)
+      .filter(r=>r.quickMatch&&r.mode===mode&&r.state==='playing'&&(r.aiBackfillUntil||0)>now&&list(r).some(p=>p.ai))
+      .sort((a,b)=>(a.startedAt||0)-(b.startedAt||0))[0];
+    if(!room){i++;continue}
+    const bot=list(room).filter(p=>p.ai).sort((a,b)=>(a.kills||0)-(b.kills||0)||Number(a.alive)-Number(b.alive))[0];
+    if(!bot){i++;continue}
+    queue.splice(i,1);
+    if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null;
+    clearTimeout(bot.respawnTimer);clearTimeout(bot.reconnectTimer);delete room.players[bot.id];
+    try{
+      const id=addPlayer(entry.ws,room,entry.player),player=room.players[id];
+      player.sc=0;player.kills=0;player.deaths=0;player.damage=0;player.shieldUses=0;player.eliminated=false;
+      player.livesRemaining=mode==='survivor'?(room.lives||1):null;
+      spawn(player,room);
+      send(entry.ws,{t:'matchmaking',status:'matched',mode,players:list(room).length,target:cfg.target,aiPlayers:list(room).filter(p=>p.ai).length,roomCode:room.code,backfill:true});
+      send(entry.ws,{t:'welcome',id,code:room.code,roomId:room.code,mode,session:player.sessionToken,quickMatch:true,backfill:true});
+      rcast(room,info(room));
+      send(entry.ws,{t:'round',n:room.round,score:room.score,mode:room.mode,lives:room.lives||1,hidden:Math.max(0,(room.roundHiddenUntil||0)-Date.now()),spectatorReady:true,backfill:true});
+      send(entry.ws,{t:'snap',players:snapshotOf(room),score:room.score,round:room.round,state:room.state});
+      broadcastGames();
+      console.log('[matchmaking] backfilled mode='+mode+' room='+room.code+' human='+player.n+' aiRemaining='+list(room).filter(p=>p.ai).length);
+    }catch(e){
+      room.players[bot.id]=bot;
+      entry.ws.room=null;delete entry.ws.id;delete entry.ws.sessionToken;
+      send(entry.ws,{t:'matchmaking',status:'error',mode,message:'Could not join the live match. Please search again.'});
+    }
+  }
+}
 function processMatchmakingQueues(now=Date.now()){
   for(const mode of Object.keys(MATCHMAKING)){
     const cfg=MATCHMAKING[mode],queue=matchmakingQueues[mode];
@@ -443,6 +476,7 @@ function processMatchmakingQueues(now=Date.now()){
     while(queue.length>=cfg.target){
       createQuickMatch(mode,queue.splice(0,cfg.target));
     }
+    if(queue.length&&queue.length<cfg.target)backfillQueuedPilots(mode,queue,now);
     if(queue.length>=cfg.minPlayers&&queue[0]&&now-queue[0].queuedAt>=cfg.timeoutMs){
       createQuickMatch(mode,queue.splice(0,Math.min(cfg.target,queue.length)));
     }
