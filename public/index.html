@@ -249,6 +249,72 @@ body.maydayMouseLocked,body.maydayMouseLocked *{cursor:none!important}
 @media (pointer:coarse) and (orientation:landscape){#mobileSettingsBtn{top:5px;font-size:8px;padding:6px 7px;left:calc(50% + 80px)}.hudEditorCard{top:32px;max-height:calc(100dvh - 38px);width:min(440px,92vw)}.mobileSettingsCard{padding:10px;max-height:94dvh}.mobileSettingRow{padding:5px 0;font-size:11px}}
 @media (pointer:coarse) and (max-width:650px){.hudEditorGrid{gap:5px}.hudEditorActions button,.hudEditorSlots button{font-size:8px;padding:5px 6px}.mobileSettingRow{grid-template-columns:minmax(100px, .9fr) minmax(135px,1.1fr);gap:6px}}
 
+
+/* v73 responsive fixed-viewport lobby */
+html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscroll-behavior:none}
+#lobby{height:100dvh;min-height:0;box-sizing:border-box;overflow:hidden!important;justify-content:flex-start;align-items:center;gap:0;padding:clamp(4px,.8vh,9px) clamp(8px,1.35vw,20px) calc(4px + env(safe-area-inset-bottom))}
+#lobby>h1{flex:0 0 auto;font-size:clamp(1.65rem,5vh,3.75rem);line-height:.98;margin:0 0 clamp(2px,.45vh,6px)}
+#buildVersionBadge{flex:0 0 auto;margin:0 auto clamp(3px,.6vh,7px)!important;padding:3px 8px!important;font-size:clamp(8px,.95vh,10px)!important;line-height:1.1}
+#menu{flex:0 1 auto;width:min(100%,1220px);max-width:1220px;min-width:0;min-height:0;max-height:calc(100dvh - 108px);margin:0 auto!important;overflow:hidden}
+#menu>div:first-child{min-height:0;height:clamp(28px,4vh,40px);align-items:center}
+#menu>div:nth-child(2){gap:clamp(4px,.65vw,9px);min-height:0}
+#menu input[type=text],#menu select{box-sizing:border-box;margin:clamp(2px,.35vh,5px)!important;padding:clamp(5px,.7vh,9px)!important;font-size:clamp(.74rem,1.25vh,1rem)!important}
+#menu>label{margin:clamp(2px,.45vh,6px)!important;font-size:clamp(.7rem,1.35vh,1rem)!important;line-height:1.12}
+#menu>p{font-size:clamp(.63rem,1.25vh,.86rem)!important;line-height:1.2!important;margin:clamp(1px,.25vh,3px) 0!important}
+#modePicker{min-height:0;margin-top:clamp(2px,.45vh,6px)}
+#modePicker>div:first-child{font-size:clamp(.82rem,1.75vh,1.12rem)!important;margin-bottom:clamp(2px,.4vh,5px)!important}
+.modeGrid{width:100%;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(6px,.8vw,12px);margin:0 0 clamp(3px,.5vh,7px)}
+.modeCard{box-sizing:border-box;height:clamp(86px,calc(50dvh - 280px),140px);min-height:0;padding:clamp(8px,1vw,16px)!important;margin:0!important;border-radius:clamp(9px,1vw,16px)}
+.modeCard:nth-child(5){grid-column:2}
+.modeNo{font-size:clamp(.62rem,.9vh,.8rem)}
+.modeName{font-size:clamp(.82rem,1.55vw,1.5rem)!important;line-height:1.06;margin-top:clamp(3px,.55vh,8px)}
+.modeMeta{font-size:clamp(.62rem,1.05vw,.88rem)!important;line-height:1.22;margin-top:clamp(2px,.4vh,6px)}
+.modeArt{font-size:clamp(3.1rem,5.8vw,7rem)}
+#modeHelp{flex:0 0 auto;max-width:100%;font-size:clamp(.58rem,1.05vh,.84rem)!important;line-height:1.1;margin:2px auto 0!important}
+#err{flex:0 0 auto;min-height:0!important;height:clamp(0px,.6vh,6px);margin:0!important;font-size:10px}
+@media(max-width:1050px){
+ #menu{width:100%;max-width:900px;max-height:calc(100dvh - 96px)}
+ .modeGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .modeCard:nth-child(5){grid-column:1/-1;height:clamp(58px,calc(15dvh + 4px),92px)}
+}
+@media(max-width:760px){
+ #lobby{padding:calc(4px + env(safe-area-inset-top)) 8px calc(4px + env(safe-area-inset-bottom))}
+ #lobby>h1{font-size:clamp(1.5rem,6vh,2.35rem);margin-bottom:2px}
+ #buildVersionBadge{margin-bottom:3px!important}
+ #menu{width:100%;max-width:760px;max-height:calc(100dvh - 82px)}
+ #menu>div:first-child{position:static!important;height:clamp(25px,4vh,34px)}
+ #menu>div:nth-child(2){gap:2px}
+ #menu>p{font-size:clamp(.62rem,1.25vh,.76rem)!important;line-height:1.14!important;margin:2px 0!important}
+ #menu>p:nth-of-type(2),#menu>p:nth-of-type(3){display:none}
+ .modeGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(5px,1vw,8px)}
+ .modeCard{height:clamp(62px,calc(34dvh - 130px),104px);padding:clamp(6px,1.6vw,10px)!important}
+ .modeCard:nth-child(5){grid-column:1/-1;height:clamp(52px,calc(27dvh - 95px),84px)}
+ .modeName{font-size:clamp(.78rem,2.9vw,1rem)!important;margin-top:3px}
+ .modeMeta{font-size:clamp(.58rem,1.75vw,.72rem)!important;line-height:1.14;margin-top:3px}
+ .modeArt{font-size:clamp(3rem,11vw,4.5rem);right:-6px;bottom:-17px}
+ #modeHelp{font-size:clamp(.55rem,1.1vh,.68rem)!important}
+}
+@media(max-height:650px) and (min-width:761px){
+ #lobby>h1{font-size:clamp(1.5rem,5.6vh,2.6rem)}
+ #menu>p:nth-of-type(2),#menu>p:nth-of-type(3){display:none}
+ .modeCard{height:clamp(54px,calc(24dvh - 40px),88px)}
+ .modeName{font-size:clamp(.78rem,1.5vw,1.15rem)!important;margin-top:2px}
+ .modeMeta{font-size:clamp(.6rem,1vh,.72rem)!important;line-height:1.12;margin-top:2px}
+ .modeArt{font-size:clamp(3rem,5vw,4.5rem)}
+}
+@media(max-width:760px) and (max-height:600px){
+ #lobby>h1{font-size:clamp(1.25rem,5vh,1.8rem)}
+ #menu>p{display:none!important}
+ #menu>label{margin:1px!important;font-size:.65rem!important}
+ .modeCard{height:clamp(46px,calc(13dvh + 10px),68px)!important;padding:5px!important}
+ .modeCard:nth-child(5){height:clamp(42px,calc(11dvh + 8px),58px)!important}
+ .modeNo{font-size:.55rem}
+ .modeName{font-size:clamp(.68rem,2.5vw,.84rem)!important;margin-top:1px}
+ .modeMeta{font-size:clamp(.52rem,1.3vw,.61rem)!important;line-height:1.05;margin-top:1px}
+ .modeArt{font-size:2.7rem}
+ #modePicker>div:first-child{font-size:.78rem!important;margin-bottom:2px!important}
+}
+
 </style></head><body>
 <canvas id="radar" width="240" height="240"></canvas><div id="roomCodeHud"></div><div id="missileWarning"></div><div id="shieldHud"></div><div id="spectatorHud"></div><div id="hud"></div><div id="landingHint"></div><div id="score"></div><div id="toast"></div><div id="quickAlert" role="status" aria-live="assertive"></div><div id="cross"></div><button id="killReplayBtn" type="button" aria-label="Play kill replay from the killer’s point of view when available">↻ KILL REPLAY (P)</button><div id="killConfirm"><span class="killIcon">☠</span><span class="killWord">KILL</span><span class="killTarget"></span></div><div id="lock"></div><div id="warn"></div><div id="win"></div><div id="banner"></div>
 <button id="gameSettingsBtn" class="navBtn">⚙ SETTINGS</button>
