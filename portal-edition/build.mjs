@@ -176,7 +176,7 @@ assert(client.includes("function connect(first){if(PORTAL_STANDALONE)"), 'Multip
 assert(client.includes("function connectSocial(){if(PORTAL_STANDALONE)return;"), 'Social socket guard is missing.');
 assert(client.includes("function startPortalMode(mode)"), 'All-five-mode controller is missing.');
 assert(client.includes("portalResolveClashRound(true)"), 'Offline Clash Squad rounds are missing.');
-assert(client.includes("portalLives+'/5'"), 'Survivor lives HUD is missing.');
+assert(client.includes("portalLives+'/5  •  KILLS '"), 'Survivor lives HUD is missing.');
 assert(html.includes('data-mode="survivor"') && html.includes('data-mode="ffa"') && html.includes('data-mode="clash"') && html.includes('data-mode="practice"') && html.includes('data-mode="challenge"'), 'All five mode cards must remain in the portal HTML.');
 assert(client.includes("window.__portalGameFrozen)return;"), 'Render-loop pause guard is missing.');
 assert(client.includes("portalShowMissionComplete();"), 'Mission-complete flow is missing.');
