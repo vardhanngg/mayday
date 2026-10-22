@@ -802,7 +802,7 @@ function goMainMenu(){
   // in one subsystem cannot leave the player trapped behind the room/results UI.
   roomExitInProgress=true;
   const transition=++homeTransitionSeq;
-  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;challengeMode=false;practiceKills=0;practiceRespawnAt=0;
+  inGame=false;over=false;alive=false;spectatorMode=false;roundHiddenUntil=0;practiceMode=false;challengeMode=false;practiceKills=0;practiceRespawnAt=0;if(AC&&engineGain){engineGain.gain.cancelScheduledValues(AC.currentTime);engineGain.gain.setValueAtTime(0,AC.currentTime)}try{missileFlySound(false)}catch(e){}
   roomMode='clash';roomInfo=null;roomCode='';isHost=false;specIdx=0;specId=null;snapPlayers={};
   forceMainMenuView();
   try{closeConfirmDialog()}catch(e){console.warn('MAYDAY menu: dialog cleanup failed',e)}
