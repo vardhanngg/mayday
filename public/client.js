@@ -489,6 +489,160 @@ function updatePracticeBots(now,dt){
  }
 }
 function i18nBotName(id){return 'DRONE '+String(id).split('-')[1]}
+const flightChallenge={objects:[],solids:[],gates:[],flags:[],targets:[],nextGate:0,flagsCollected:0,targetsDestroyed:0,startTime:0,finished:false,lastGateMiss:0};
+function clearFlightChallenge(){
+  const geometrySet=new Set(),materialSet=new Set();
+  for(const root of flightChallenge.objects||[]){
+    scene.remove(root);
+    root.traverse?.(o=>{if(o.geometry)geometrySet.add(o.geometry);if(o.material){if(Array.isArray(o.material))o.material.forEach(m=>materialSet.add(m));else materialSet.add(o.material)}});
+  }
+  geometrySet.forEach(g=>g.dispose());
+  materialSet.forEach(m=>m.dispose());
+  for(const solid of flightChallenge.solids||[]){const i=solidVolumes.indexOf(solid);if(i>=0)solidVolumes.splice(i,1)}
+  flightChallenge.objects=[];flightChallenge.solids=[];flightChallenge.gates=[];flightChallenge.flags=[];flightChallenge.targets=[];
+  flightChallenge.nextGate=0;flightChallenge.flagsCollected=0;flightChallenge.targetsDestroyed=0;flightChallenge.startTime=0;flightChallenge.finished=false;flightChallenge.lastGateMiss=0;
+}
+function addFlightChallengeObject(root){scene.add(root);flightChallenge.objects.push(root);return root}
+function addChallengeBuilding(x,z,w,h,d,shade=0x405f79){
+  const ground=Math.max(height(x,z),0),root=new T.Group();
+  const bodyMat=new T.MeshStandardMaterial({color:shade,roughness:.82,metalness:.12});
+  const roofMat=new T.MeshStandardMaterial({color:0x263949,roughness:.72,metalness:.18});
+  const glassMat=new T.MeshStandardMaterial({color:0x72c9e8,emissive:0x123c50,roughness:.3,metalness:.15});
+  const body=new T.Mesh(new T.BoxGeometry(w,h,d),bodyMat);body.position.y=ground+h/2;root.add(body);
+  const roof=new T.Mesh(new T.BoxGeometry(w+10,10,d+10),roofMat);roof.position.y=ground+h+5;root.add(roof);
+  for(const side of [-1,1]){
+    const rows=Math.max(2,Math.floor(h/75)),cols=Math.max(2,Math.floor(w/55));
+    for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+      const win=new T.Mesh(new T.BoxGeometry(Math.min(20,w/(cols+1)*.45),Math.min(24,h/(rows+1)*.4),3),glassMat);
+      win.position.set(-w/2+(col+1)*w/(cols+1),ground+24+row*(h-40)/rows,side*(d/2+1.8));root.add(win);
+    }
+  }
+  root.position.set(x,0,z);addFlightChallengeObject(root);
+  const solid={x,z,r:Math.max(65,Math.hypot(w,d)*.43),base:ground,top:ground+h+18};
+  solidVolumes.push(solid);flightChallenge.solids.push(solid);
+}
+function createFlightChallengeCourse(){
+  clearFlightChallenge();
+  flightChallenge.startTime=performance.now();
+  const gateSpecs=[
+    {x:0,z:-1500,alt:560},
+    {x:520,z:-2850,alt:500},
+    {x:1320,z:-4250,alt:430},
+    {x:1360,z:-5850,alt:380},
+    {x:300,z:-7300,alt:420},
+    {x:-820,z:-8750,alt:480},
+    {x:-1240,z:-10100,alt:420}
+  ];
+  let prev={x:0,z:0};
+  for(let i=0;i<gateSpecs.length;i++){
+    const spec=gateSpecs[i],ground=Math.max(height(spec.x,spec.z),0),y=ground+spec.alt;
+    const angle=Math.atan2(spec.x-prev.x,spec.z-prev.z),root=new T.Group();root.position.set(spec.x,y,spec.z);root.rotation.y=angle;
+    const ringMat=new T.MeshStandardMaterial({color:i===0?0x8cffb0:0x39dff2,emissive:i===0?0x13572a:0x06404e,metalness:.32,roughness:.26});
+    const ring=new T.Mesh(new T.TorusGeometry(122,10,12,48),ringMat);root.add(ring);
+    const beaconMat=new T.MeshBasicMaterial({color:0xffd166});
+    const beacon=new T.Mesh(new T.OctahedronGeometry(15,1),beaconMat);beacon.position.y=145;root.add(beacon);
+    for(const side of [-1,1]){
+      const lamp=new T.Mesh(new T.SphereGeometry(8,10,8),new T.MeshBasicMaterial({color:0x9efff5}));
+      lamp.position.set(side*122,-10,0);root.add(lamp);
+    }
+    addFlightChallengeObject(root);
+    flightChallenge.gates.push({id:'gate-'+(i+1),root,ring,position:new T.Vector3(spec.x,y,spec.z),quaternion:root.quaternion.clone(),aperture:103,passed:false});
+    prev=spec;
+  }
+  const flagSpecs=[
+    {x:130,z:-760,alt:335},{x:270,z:-2150,alt:315},{x:890,z:-3500,alt:300},
+    {x:1570,z:-5150,alt:300},{x:850,z:-6650,alt:310},{x:-280,z:-8000,alt:330},{x:-1070,z:-9500,alt:300}
+  ];
+  for(let i=0;i<flagSpecs.length;i++){
+    const spec=flagSpecs[i],ground=Math.max(height(spec.x,spec.z),0),root=new T.Group();
+    const poleMat=new T.MeshStandardMaterial({color:0xd7e2e8,metalness:.55,roughness:.36});
+    const pole=new T.Mesh(new T.CylinderGeometry(3.2,4.5,spec.alt+30,8),poleMat);pole.position.y=(spec.alt+30)/2;root.add(pole);
+    const flagMat=new T.MeshStandardMaterial({color:[0xffd166,0x62e7ff,0xff786b,0xa6ff89][i%4],emissive:0x281b05,side:T.DoubleSide,metalness:.12,roughness:.42});
+    const cloth=new T.Mesh(new T.BoxGeometry(62,34,3),flagMat);cloth.position.set(28,spec.alt-6,0);root.add(cloth);
+    const marker=new T.Mesh(new T.TorusGeometry(24,4,8,24),new T.MeshBasicMaterial({color:0xffed9a}));marker.position.set(28,spec.alt-6,0);root.add(marker);
+    root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);
+    flightChallenge.flags.push({id:'flag-'+(i+1),root,cloth,position:new T.Vector3(spec.x,ground+spec.alt-6,spec.z),active:true});
+  }
+  const buildingSpecs=[
+    {x:-510,z:-2220,w:170,h:280,d:170,c:0x44647d},{x:510,z:-2220,w:170,h:340,d:170,c:0x344e68},
+    {x:760,z:-4700,w:180,h:310,d:190,c:0x3c6076},{x:1920,z:-4700,w:180,h:390,d:190,c:0x4c5a75},
+    {x:-420,z:-7580,w:180,h:300,d:170,c:0x3d596c},{x:590,z:-7580,w:180,h:350,d:180,c:0x38556e},
+    {x:-1810,z:-9300,w:190,h:370,d:180,c:0x4a5d72},{x:-590,z:-9300,w:160,h:270,d:180,c:0x3b6175}
+  ];
+  buildingSpecs.forEach(b=>addChallengeBuilding(b.x,b.z,b.w,b.h,b.d,b.c));
+  const targetSpecs=[
+    {x:880,z:-2180,alt:450,from:{x:520,z:-2850}},
+    {x:2050,z:-5100,alt:470,from:{x:1360,z:-5850}},
+    {x:-1740,z:-9300,alt:460,from:{x:-820,z:-8750}}
+  ];
+  for(let i=0;i<targetSpecs.length;i++){
+    const spec=targetSpecs[i],ground=Math.max(height(spec.x,spec.z),0),root=new T.Group();
+    const angle=Math.atan2(spec.x-spec.from.x,spec.z-spec.from.z);root.rotation.y=angle;
+    const standMat=new T.MeshStandardMaterial({color:0x576977,metalness:.5,roughness:.4});
+    const stand=new T.Mesh(new T.CylinderGeometry(18,26,spec.alt,12),standMat);stand.position.y=spec.alt/2;root.add(stand);
+    const frameMat=new T.MeshStandardMaterial({color:0xf1f5f8,emissive:0x302020,metalness:.2,roughness:.3});
+    const targetRing=new T.Mesh(new T.TorusGeometry(66,9,12,36),frameMat);targetRing.position.y=spec.alt;root.add(targetRing);
+    const redMat=new T.MeshStandardMaterial({color:0xff4c48,emissive:0x5b0808,metalness:.1,roughness:.35});
+    const bullseye=new T.Mesh(new T.SphereGeometry(18,16,12),redMat);bullseye.position.set(0,spec.alt,0);root.add(bullseye);
+    const dotMat=new T.MeshBasicMaterial({color:0xffd166});
+    const dot=new T.Mesh(new T.SphereGeometry(6,10,8),dotMat);dot.position.set(0,spec.alt,0);root.add(dot);
+    root.position.set(spec.x,ground,spec.z);addFlightChallengeObject(root);
+    flightChallenge.targets.push({id:'challenge-target-'+(i+1),root,center:new T.Vector3(spec.x,ground+spec.alt,spec.z),active:true,hitRadius:88});
+  }
+}
+function challengeTargetHit(id){
+  const target=flightChallenge.targets.find(t=>t.id===String(id));
+  if(!challengeMode||!target||!target.active)return;
+  target.active=false;target.root.visible=false;flightChallenge.targetsDestroyed++;
+  toast('MISSILE HIT • TARGET '+flightChallenge.targetsDestroyed+'/'+flightChallenge.targets.length);
+}
+function updateFlightChallenge(px,py,pz,now){
+  if(!challengeMode||!inGame||!alive||!plane||flightChallenge.finished)return;
+  const gate=flightChallenge.gates[flightChallenge.nextGate];
+  if(gate){
+    const inverse=gate.quaternion.clone().invert();
+    const from=new T.Vector3(px,py,pz).sub(gate.position).applyQuaternion(inverse);
+    const to=plane.position.clone().sub(gate.position).applyQuaternion(inverse);
+    if(from.z<=0&&to.z>0){
+      const t=Math.max(0,Math.min(1,-from.z/(to.z-from.z)));
+      const at=from.clone().lerp(to,t);
+      if(Math.hypot(at.x,at.y)<=gate.aperture){
+        gate.passed=true;gate.ring.material.color.setHex(0x80ff9c);gate.ring.material.emissive.setHex(0x13572a);
+        flightChallenge.nextGate++;tone(920,.12,'sine',.08);toast('CHECKPOINT '+flightChallenge.nextGate+'/'+flightChallenge.gates.length);
+      }else if(now-(flightChallenge.lastGateMiss||0)>1400){flightChallenge.lastGateMiss=now;toast('CHECKPOINT MISSED • LINE UP THROUGH THE ARCH')}
+    }
+  }
+  for(const flag of flightChallenge.flags){
+    if(flag.active&&plane.position.distanceTo(flag.position)<92){
+      flag.active=false;flag.root.visible=false;flightChallenge.flagsCollected++;tone(1180,.1,'sine',.07);
+      toast('FLAG COLLECTED • '+flightChallenge.flagsCollected+'/'+flightChallenge.flags.length);
+    }
+  }
+  if(flightChallenge.nextGate>=flightChallenge.gates.length&&flightChallenge.flagsCollected>=flightChallenge.flags.length&&flightChallenge.targetsDestroyed>=flightChallenge.targets.length){
+    flightChallenge.finished=true;toast('FLIGHT CHALLENGE COMPLETE • ALL GATES, FLAGS AND TARGETS CLEARED!');
+  }
+}
+function flightChallengeHudText(){
+  const elapsed=Math.max(0,Math.floor((performance.now()-(flightChallenge.startTime||performance.now()))/1000));
+  const time=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
+  const next=flightChallenge.gates[flightChallenge.nextGate];
+  const distance=next&&plane?Math.round(plane.position.distanceTo(next.position))+' m':'—';
+  const status=flightChallenge.finished?'COURSE COMPLETE':next?'NEXT ARCH · '+distance:'ALL CHECKPOINTS CLEARED';
+  return '<b>FLIGHT CHALLENGE</b><br>CHECKPOINTS: '+flightChallenge.nextGate+'/'+flightChallenge.gates.length+
+    '<br>FLAGS: '+flightChallenge.flagsCollected+'/'+flightChallenge.flags.length+
+    '<br>MISSILE TARGETS: '+flightChallenge.targetsDestroyed+'/'+flightChallenge.targets.length+
+    '<br>TIME: '+time+'<br><small>'+status+' · F = UNGUIDED MISSILE · ESC = EXIT</small>';
+}
+function startFlightChallenge(){
+  clearKillReplay();initAudio();saveSet();challengeMode=false;practiceMode=false;clearWorld();if(plane){scene.remove(plane);plane=null}
+  roomMode='challenge';challengeMode=true;practiceMode=true;practiceDifficulty='normal';practiceKills=0;practiceRespawnAt=0;
+  inGame=true;over=false;alive=true;spectatorMode=false;isHost=false;roomInfo=null;roomCode='';ws=null;myId='challenge-player';myTeam='challenge-player';snapPlayers={};shields=0;shieldUntil=0;lockId=null;lockT=0;lastMissile=performance.now()-5000;
+  myColor=COLOR_BY_ID[selectedColorId]?.color||'#ffffff';maxhp=(PT[ptype]||PT.balanced).hp;hp=maxhp;
+  plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();RANGE=4200;reset();createFlightChallengeCourse();
+  document.getElementById('lobby').style.display='none';showGameplayUi();document.getElementById('radar').style.display='block';winEl.style.display='none';bannerEl.textContent='';shieldHud.style.display='none';spectatorHud.style.display='none';setMusic(false);
+  toast('FLIGHT CHALLENGE • PASS 7 ARCHES · COLLECT 7 FLAGS · DESTROY 3 TARGETS WITH UNGUIDED F MISSILES');
+}
+
 function practicePlayerHit(amount,source){
  if(!practiceMode||!alive||performance.now()<spawnGrace)return;
  hp=Math.max(0,hp-amount);vibrateOnHit(amount);shake=Math.max(shake,.12+(amount>20?.22:0));
