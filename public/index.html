@@ -315,6 +315,29 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
  #modePicker>div:first-child{font-size:.78rem!important;margin-bottom:2px!important}
 }
 
+
+
+/* v78 mobile touch/HUD refinements */
+@media (pointer:coarse) and (orientation:landscape){
+ #hud,#score{box-sizing:border-box;min-width:0;max-width:clamp(118px,24vw,240px);overflow-wrap:anywhere;}
+ #hud{padding:5px 7px;}
+ #score{padding:5px 7px;}
+ #roomCodeHud,#shieldHud{box-sizing:border-box;max-width:min(30vw,240px);overflow-wrap:anywhere;}
+ #toast{max-width:min(58vw,420px);white-space:normal;line-height:1.25;}
+ #mobileControls button[data-hud-key]{box-sizing:border-box;max-width:clamp(52px,9vw,82px);white-space:normal;overflow-wrap:anywhere;}
+}
+@media (pointer:coarse) and (max-height:420px){
+ #hud,#score{font-size:8px;line-height:1.15;}
+ #radar{width:82px;height:82px;}
+ #roomCodeHud{top:78px;}
+ #shieldHud{top:calc(54px + 22vh);}
+ .mobileStick{width:96px;height:96px;}
+ .mobileStickNub{width:39px;height:39px;margin:-19.5px;}
+}
+@media (pointer:coarse){
+ #hud,#score,#radar,#roomCodeHud,#shieldHud{max-width:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 12px);}
+ #mobileControls button,#mobileControls .mobileStick{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
+}
 </style></head><body>
 <canvas id="radar" width="240" height="240"></canvas><div id="roomCodeHud"></div><div id="missileWarning"></div><div id="shieldHud"></div><div id="spectatorHud"></div><div id="hud"></div><div id="landingHint"></div><div id="score"></div><div id="toast"></div><div id="quickAlert" role="status" aria-live="assertive"></div><div id="cross"></div><button id="killReplayBtn" type="button" aria-label="Play kill replay from the killer’s point of view when available">↻ KILL REPLAY (P)</button><div id="killConfirm"><span class="killIcon">☠</span><span class="killWord">KILL</span><span class="killTarget"></span></div><div id="lock"></div><div id="warn"></div><div id="win"></div><div id="banner"></div>
 <button id="gameSettingsBtn" class="navBtn">⚙ SETTINGS</button>
@@ -375,7 +398,7 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
   </div>
 </div>
 <div id="set"><b>Sensitivity</b> (O = hide/show)<br>Up/Down <input id="sp" type="range" min=".3" max="3" step=".1" value="1"><br>Tilt A/D <input id="sr" type="range" min=".3" max="3" step=".1" value="1"><br>Turn &larr;/&rarr; <input id="sy" type="range" min=".3" max="3" step=".1" value="1"></div>
-<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v74.0-challenge-radar-engine-audio</div>
+<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v78.0-mobile-touch-polish</div>
 <div id="menu"><div style="display:flex;justify-content:flex-end;max-width:920px;margin:0 auto 2px"><button id="openSettings" class="navBtn" style="margin-top:0;min-width:120px">⚙ SETTINGS</button></div>
 <div><input id="name" type="text" placeholder="Your name" maxlength="14"> <label>Plane <select id="ptype" style="padding:8px;font-size:1rem;border-radius:8px;border:0"><option value="fighter">Fighter · 75 HP · fast & agile</option><option value="balanced" selected>Balanced · 100 HP · all-round</option><option value="heavy">Heavy · 150 HP · tough, slow turns</option><option value="interceptor">Interceptor · 90 HP · very fast · sharp turns</option><option value="striker">Strike Fighter · 175 HP · heavy assault · broad wings</option></select></label> <span id="colorIntro" style="opacity:.75">Pilot color and aircraft can be changed inside the room.</span></div>
 <label style="display:block;margin:10px;font-size:1.05rem"><input type="checkbox" id="inv" style="width:18px;height:18px;vertical-align:middle"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label>
@@ -422,4 +445,4 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
 <div id="socialInviteDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="socialInviteTitle"><div class="socialInviteBox"><h3 id="socialInviteTitle">MAYDAY ROOM INVITATION</h3><p id="socialInviteText"></p><div class="socialInviteActions"><button id="declineSocialInvite" class="declineSocial">DECLINE</button><button id="acceptSocialInvite">ACCEPT & JOIN</button></div></div></div>
 <div id="confirmDialog"><div id="confirmBox"><h3 id="confirmTitle">Leave?</h3><p id="confirmText"></p><div id="confirmActions"><button id="confirmCancel">CANCEL</button><button id="confirmOk">LEAVE</button></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/client.js?v=v74.0-challenge-radar-engine-audio"></script></body></html>
+<script src="/client.js?v=v78.0-mobile-touch-polish"></script></body></html>

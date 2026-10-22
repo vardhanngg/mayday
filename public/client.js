@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v77.1-pilot-matching-fix';
+const MAYDAY_BUILD='v78.0-mobile-touch-polish';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -359,10 +359,31 @@ mobileSettingValue('mobileAutoLevel')?.addEventListener('change',e=>{mobilePrefs
 mobileSettingValue('mobileSettingsReset')?.addEventListener('click',()=>{mobilePrefs={...mobilePrefs,joystickSensitivity:1,cameraSensitivity:1,invertPitch:false,autoLevel:false,flightModel:'arcade',graphicsPreset:TOUCH_DEVICE?'medium':'high',showFps:false,vibrateOnHit:!!TOUCH_DEVICE,showLabels:true};invert=-1;const invBox=document.getElementById('inv');if(invBox)invBox.checked=false;saveSet();persistMobilePreferences();applyGraphicsPreset(mobilePrefs.graphicsPreset,false);const meter=mobileSettingValue('fpsMeter');if(meter)meter.style.display='none';syncMobileSettingsUi();toast('MOBILE SETTINGS RESET')});
 let lastHitVibration=0;function vibrateOnHit(amount=10){if(!mobileTouchEnabled||!mobilePrefs.vibrateOnHit||typeof navigator.vibrate!=='function')return;const now=performance.now();if(now-lastHitVibration<180)return;lastHitVibration=now;try{navigator.vibrate(amount>=35?[45,28,65]:amount>=15?35:18)}catch(_){}}
 let fpsFrames=0,fpsLast=performance.now(),fpsAverage=0;const fpsMeter=mobileSettingValue('fpsMeter');function updateFpsMeter(dt){if(!mobilePrefs.showFps)return;fpsFrames++;const now=performance.now();if(now-fpsLast>=400){const elapsed=now-fpsLast,instant=fpsFrames*1000/Math.max(1,elapsed);fpsAverage=fpsAverage?fpsAverage*.65+instant*.35:instant;if(fpsMeter){fpsMeter.textContent=`FPS ${Math.round(fpsAverage)} · ${graphicsPreset.toUpperCase()}`;fpsMeter.style.display='block'}fpsFrames=0;fpsLast=now}}
-function touchLookStart(e){if(!mobileTouchEnabled||!inGame||!alive||hudEditMode||mobileSettingValue('mobileSettingsPanel')?.style.display==='flex'||e.pointerType!=='touch')return;if(mobileLookPointer!==null)return;mobileLookPointer=e.pointerId;mobileLookLast={x:e.clientX,y:e.clientY};try{ren.domElement.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault()}
-function touchLookMove(e){if(!mobileTouchEnabled||mobileLookPointer!==e.pointerId)return;const dx=e.clientX-mobileLookLast.x,dy=e.clientY-mobileLookLast.y;mobileLookLast={x:e.clientX,y:e.clientY};mobileCameraYaw=T.MathUtils.clamp(mobileCameraYaw-dx*.006*mobilePrefs.cameraSensitivity,-2.25,2.25);mobileCameraPitch=T.MathUtils.clamp(mobileCameraPitch-dy*.005*mobilePrefs.cameraSensitivity,-.72,.72);e.preventDefault()}
-function touchLookEnd(e){if(e&&mobileLookPointer!==e.pointerId)return;mobileLookPointer=null}
-ren.domElement.style.touchAction=mobileTouchEnabled?'none':'auto';ren.domElement.addEventListener('pointerdown',touchLookStart,{passive:false});ren.domElement.addEventListener('pointermove',touchLookMove,{passive:false});ren.domElement.addEventListener('pointerup',touchLookEnd);ren.domElement.addEventListener('pointercancel',touchLookEnd);
+function touchLookStart(e){
+ if(!mobileTouchEnabled||!inGame||!alive||hudEditMode||mobileSettingValue('mobileSettingsPanel')?.style.display==='flex'||e.pointerType!=='touch')return;
+ // The renderer canvas intentionally ignores pointer events, so begin camera-look
+ // gestures from the document instead. Never steal a touch from a HUD control or menu.
+ if(e.target?.closest?.('#mobileControls,button,input,select,textarea,a,[role="dialog"],#hudEditor,#mobileSettingsPanel,#friendsSidebar,#friendsToggle,#socialInviteDialog,#confirmDialog,#results'))return;
+ if(mobileLookPointer!==null)return;
+ mobileLookPointer=e.pointerId;mobileLookLast={x:e.clientX,y:e.clientY};
+ if(e.cancelable)e.preventDefault();
+}
+function touchLookMove(e){
+ if(!mobileTouchEnabled||mobileLookPointer!==e.pointerId)return;
+ const dx=e.clientX-mobileLookLast.x,dy=e.clientY-mobileLookLast.y;mobileLookLast={x:e.clientX,y:e.clientY};
+ mobileCameraYaw=T.MathUtils.clamp(mobileCameraYaw-dx*.006*mobilePrefs.cameraSensitivity,-2.25,2.25);
+ mobileCameraPitch=T.MathUtils.clamp(mobileCameraPitch-dy*.005*mobilePrefs.cameraSensitivity,-.72,.72);
+ if(e.cancelable)e.preventDefault();
+}
+function touchLookEnd(e){if(e&&e.pointerId!==mobileLookPointer)return;mobileLookPointer=null}
+function resetMobileLook(){mobileLookPointer=null}
+ren.domElement.style.touchAction=mobileTouchEnabled?'none':'auto';
+document.addEventListener('pointerdown',touchLookStart,{capture:true,passive:false});
+document.addEventListener('pointermove',touchLookMove,{capture:true,passive:false});
+document.addEventListener('pointerup',touchLookEnd,true);
+document.addEventListener('pointercancel',touchLookEnd,true);
+addEventListener('blur',resetMobileLook);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)resetMobileLook()});
 {invert=mobilePrefs.invertPitch?1:-1;const invBox=document.getElementById('inv');if(invBox)invBox.checked=!!mobilePrefs.invertPitch}
 syncMobileSettingsUi();applyGraphicsPreset(graphicsPreset,false);if(fpsMeter)fpsMeter.style.display=mobilePrefs.showFps?'block':'none';persistHudState();
 
@@ -371,7 +392,17 @@ addEventListener('orientationchange',()=>setTimeout(()=>{applyMobileHudLayout(tr
 
 let mobileStickPointer=null;
 function resetMobileStick(){mobileStickPointer=null;mobileInput.pitch=mobileInput.yaw=mobileInput.roll=0;if(mobileStickNub)mobileStickNub.style.transform='translate(0px,0px)'}
-function setMobileVisible(visible){if(!mobileControlsEl)return;mobileControlsEl.classList.toggle('active',!!visible&&mobileTouchEnabled);if(!visible){Object.keys(mobileInput).forEach(k=>mobileInput[k]=false);resetMobileStick();mobileControlsEl.querySelectorAll('button.active').forEach(b=>b.classList.remove('active'))}}
+function setMobileVisible(visible){
+ if(!mobileControlsEl)return;
+ mobileControlsEl.classList.toggle('active',!!visible&&mobileTouchEnabled);
+ if(!visible){
+  const keyMap={throttle:'KeyW',brake:'KeyS',boost:'ShiftLeft',fire:'Space',missile:'KeyF',rear:'KeyX',mayday:'KeyG'};
+  mobileControlsEl.querySelectorAll('[data-mobile-hold]').forEach(btn=>{const action=btn.dataset.mobileHold;if(keyMap[action])keys[keyMap[action]]=false});
+  Object.keys(mobileInput).forEach(k=>mobileInput[k]=false);
+  resetMobileStick();resetMobileLook();clearMaydayHold();
+  mobileControlsEl.querySelectorAll('button.active').forEach(b=>b.classList.remove('active'));
+ }
+}
 function mobileDeployFlares(){if(!inGame||!alive||flares<=0||performance.now()<=flareCooldown||!plane)return;flareCooldown=performance.now()+900;flares--;const p=tailPos(plane).addScaledVector(fw.clone().multiplyScalar(-24),1);createFlare(p,myId);if(practiceMode)toast('FLARES DEPLOYED • '+flares+' left');else if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:'flare',p:p.toArray()}))}
 function mobileActivateShield(){if(roomMode==='clash'&&alive&&shields>0&&performance.now()>shieldUntil&&ws&&ws.readyState===1)ws.send(JSON.stringify({t:'shield'}));else if(roomMode!=='clash')toast('Shield is only available in Clash Squad')}
 function updateMobileStick(e){if(!mobileStickEl||mobileStickPointer!==e.pointerId)return;const r=mobileStickEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=Math.max(12,r.width*.34),len=Math.hypot(dx,dy),k=len>max?max/len:1,x=dx*k,y=dy*k;mobileInput.yaw=T.MathUtils.clamp(x/max,-1,1);mobileInput.roll=mobileInput.yaw;mobileInput.pitch=T.MathUtils.clamp(y/max,-1,1);if(mobileStickNub)mobileStickNub.style.transform=`translate(${x}px,${y}px)`}
