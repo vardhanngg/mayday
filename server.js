@@ -84,7 +84,42 @@ const socialSockets=new Map(),pendingSocialInvites=new Map();
 const socialParties=new Map(),pendingPartyInvites=new Map();
 function partySnapshot(p){return {id:p.id,code:p.code||'',leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(x.id)&&socialSockets.get(x.id).readyState===1}))}}
 function publishParty(p){if(!p)return;const msg={t:'socialPartyState',party:partySnapshot(p)};for(const id of p.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,msg)}}
-function removePartyMember(id){for(const p of socialParties.values()){if(!p.members.has(id))continue;p.members.delete(id);if(p.members.size<2){for(const left of p.members){const sw=socialSockets.get(left);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null})}socialParties.delete(p.id);return}if(p.leaderId===id)p.leaderId=p.members.values().next().value;publishParty(p);return}}
+function removePartyMember(id){
+  for(const p of socialParties.values()){
+    if(!p.members.has(id))continue;
+    // A member leaving during search must not leave a stale queue seat behind.
+    for(const modeName of Object.keys(matchmakingQueues||{})){
+      for(const entry of [...(matchmakingQueues[modeName]||[])]){
+        if(entry.profileId===id&&entry.partyId===p.id)removeMatchmakingEntry(entry.ws,'cancelled','Party membership changed. Return to the lobby and start a new search.');
+      }
+    }
+    p.members.delete(id);
+    for(const invite of pendingPartyInvites.values())if(invite.partyId===p.id&&(invite.fromId===id||invite.toId===id))pendingPartyInvites.delete(invite.inviteId);
+    if(p.members.size<2){
+      const remaining=[...p.members];
+      for(const left of remaining){const sw=socialSockets.get(left);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null})}
+      socialParties.delete(p.id);
+      return
+    }
+    if(p.leaderId===id)p.leaderId=p.members.values().next().value;
+    // A roster change invalidates the current queue attempt. Do not let the
+    // remaining members keep searching with a party size that no longer matches.
+    if(p.mode){
+      for(const left of p.members){
+        for(const modeName of Object.keys(matchmakingQueues||{})){
+          for(const entry of [...(matchmakingQueues[modeName]||[])]){
+            if(entry.profileId===left&&entry.partyId===p.id)removeMatchmakingEntry(entry.ws,'cancelled','Your party changed during matchmaking. Start a new search.');
+          }
+        }
+        const sw=socialSockets.get(left);
+        if(sw&&sw.readyState===1)send(sw,{t:'socialPartyQueueCancelRequest'});
+      }
+      p.mode='';
+    }
+    publishParty(p);
+    return
+  }
+}
 
 const hashToken=t=>crypto.createHash('sha256').update(String(t||'')).digest('hex');
 function saveSocial(){try{const tmp=SOCIAL_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(socialStore,null,2));fs.renameSync(tmp,SOCIAL_FILE)}catch(e){console.error('Could not save MAYDAY social data:',e.message)}}
@@ -239,22 +274,25 @@ function handleSocialMessage(ws,m){
   if(m.t==='socialPartyCancel'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(!party)return;
-    // Cancel every server-side queue entry for the whole party before notifying clients.
-    // This avoids stale countdowns if a client misses the WebSocket cancellation message.
     for(const id of party.members){
       for(const modeName of Object.keys(matchmakingQueues)){
-        const entry=matchmakingQueues[modeName].find(e=>e.profileId===id&&e.partyId===party.id);
-        if(entry)removeMatchmakingEntry(entry.ws,'cancelled','Party matchmaking cancelled by the leader.');
+        for(const entry of [...(matchmakingQueues[modeName]||[])]){
+          if(entry.profileId===id&&entry.partyId===party.id)removeMatchmakingEntry(entry.ws,'cancelled','Party matchmaking cancelled.');
+        }
       }
-      const sw=socialSockets.get(id);if(sw&&sw.readyState===1){send(sw,{t:'socialPartyQueueCancelRequest'});send(sw,{t:'socialPartyState',party:partySnapshot(party)})}
+      const sw=socialSockets.get(id);
+      if(sw&&sw.readyState===1)send(sw,{t:'socialPartyQueueCancelRequest'});
     }
-    party.mode='';publishParty(party);return
+    party.mode='';
+    publishParty(party);
+    return
   }
   if(m.t==='socialPartyStart'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id)),mode=String(m.mode||'');
     if(!party||party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can start matchmaking.'});
     if(!['ffa','clash','survivor'].includes(mode))return send(ws,{t:'socialActionResult',ok:false,message:'Choose an online mode first.'});
     if(party.members.size>MATCHMAKING[mode].target)return send(ws,{t:'socialActionResult',ok:false,message:'Your party is too large for this mode.'});
+    if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'Your party is already matchmaking. Cancel the current search before starting another.'});
     const ids=[...party.members];
     if(ids.some(id=>{const p=socialStore.profiles[id],sw=socialSockets.get(id);return !p||!sw||sw.readyState!==1||['playing','spectating','between','results','room'].includes(p.status)}))return send(ws,{t:'socialActionResult',ok:false,message:'Every party member must be online and in the lobby.'});
     party.mode=mode;publishParty(party);for(const id of ids){const sw=socialSockets.get(id);if(sw)send(sw,{t:'socialPartyQueueRequest',partyId:party.id,mode,leaderId:party.leaderId})}return
