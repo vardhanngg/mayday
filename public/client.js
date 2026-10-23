@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v79.4-party-accept-confirm';
+const MAYDAY_BUILD='v79.5-party-invite-button-fix';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1172,7 +1172,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
  socialSocket.onopen=()=>{socialSocketConnecting=false;socialIdentity=readSocialIdentity();socialSocket.send(JSON.stringify({t:'socialHello',name:document.getElementById('name')?.value||'Pilot',profileId:socialIdentity?.id,profileToken:socialIdentity?.token}))};
  socialSocket.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
   if(m.t==='socialAuthError'){try{localStorage.removeItem(SOCIAL_IDENTITY_KEY)}catch{}socialIdentity=null;socialSocket.send(JSON.stringify({t:'socialHello',name:document.getElementById('name')?.value||'Pilot'}));return}
-  if(m.t==='socialWelcome'){socialProfile=m.profile;socialIdentity={id:m.profile.id,token:m.profileToken};try{localStorage.setItem(SOCIAL_IDENTITY_KEY,JSON.stringify(socialIdentity))}catch{}const nameInput=document.getElementById('name');if(m.profile.name&&(!nameInput.value||nameInput.value==='Pilot'))nameInput.value=m.profile.name;else if(nameInput.value&&nameInput.value!==m.profile.name)setTimeout(()=>sendSocial({t:'socialRename',name:nameInput.value}),0);paintAllSocialPanels();if(pendingRoomConnect){const next=pendingRoomConnect;pendingRoomConnect=null;setTimeout(()=>connect(next),0)}return}
+  if(m.t==='socialWelcome'){socialProfile=m.profile;socialIdentity={id:m.profile.id,token:m.profileToken};try{localStorage.setItem(SOCIAL_IDENTITY_KEY,JSON.stringify(socialIdentity))}catch{}const nameInput=document.getElementById('name');if(m.profile.name&&(!nameInput.value||nameInput.value==='Pilot'))nameInput.value=m.profile.name;else if(nameInput.value&&nameInput.value!==m.profile.name)setTimeout(()=>sendSocial({t:'socialRename',name:nameInput.value}),0);paintAllSocialPanels();if(pendingPartyInviteResponse&&pendingPartyInviteResponse.expiresAt>Date.now())setTimeout(sendPendingPartyInviteResponse,0);if(pendingRoomConnect){const next=pendingRoomConnect;pendingRoomConnect=null;setTimeout(()=>connect(next),0)}return}
   if(m.t==='socialState'){const previous=new Map((socialSnapshot.friends||[]).map(f=>[f.id,f.online]));socialProfile=m.profile||socialProfile;socialSnapshot={friends:m.friends||[],incomingRequests:m.incomingRequests||[],outgoingRequests:m.outgoingRequests||[]};paintAllSocialPanels();for(const f of socialSnapshot.friends){if(f.online&&!previous.get(f.id)&&previous.has(f.id))toast(`${f.name} is online`)}return}
   if(m.t==='socialActionResult'){if(m.message)toast(m.message);const root=document.getElementById('friendsSidebarPanel');socialFeedback(root,m.message);if(m.ok===false)console.warn('[MAYDAY social] action rejected:',m.message);return}
   if(m.t==='socialPartyState'){const previousParty=socialParty;socialParty=m.party||null;paintAllSocialPanels();const q=document.getElementById('quickMatch');if(q&&['ffa','clash','survivor'].includes(selectedMode))q.textContent=socialParty?(socialParty.leaderId===socialProfile?.id?'PLAY ONLINE WITH PARTY ('+socialParty.members.length+')':'WAIT FOR PARTY LEADER'):'PLAY ONLINE';if(partyAcceptPending){partyAcceptPending=false;clearTimeout(partyAcceptTimer);if(socialParty&&socialParty.members.some(x=>x.id===socialProfile?.id)){toast('Joined party: '+socialParty.members.map(x=>x.name).join(', '))}else toast('Party join was not confirmed. Ask the leader to send a new invite.')}else if(socialParty&&(!previousParty||previousParty.members.length!==socialParty.members.length))toast('Party updated: '+socialParty.members.map(x=>x.name).join(', '));return}
@@ -1196,15 +1196,24 @@ function showPartyInvitePrompt(message){
  if(label)label.textContent=activePartyInvite.fromName+' invited you to join their online party. Accept to join their lobby squad.';
  if(dlg){dlg.style.display='flex';dlg.setAttribute('aria-hidden','false')}
 }
-let partyAcceptPending=false,partyAcceptTimer=0;
+let partyAcceptPending=false,partyAcceptTimer=0,pendingPartyInviteResponse=null,partyInviteSendTimer=0;
+function closePartyInviteDialog(){const dlg=document.getElementById('socialPartyInviteDialog');if(dlg){dlg.style.display='none';dlg.setAttribute('aria-hidden','true')}}
+function sendPendingPartyInviteResponse(){
+ if(!pendingPartyInviteResponse)return;
+ if(!socialSocket||socialSocket.readyState!==WebSocket.OPEN){connectSocial();return}
+ const response=pendingPartyInviteResponse;pendingPartyInviteResponse=null;clearTimeout(partyInviteSendTimer);
+ if(!sendSocial({t:'socialPartyInviteResponse',inviteId:response.inviteId,accept:response.accept})){pendingPartyInviteResponse=response;connectSocial();return}
+ if(response.accept){partyAcceptPending=true;toast('Accepting party invitation...');clearTimeout(partyAcceptTimer);partyAcceptTimer=setTimeout(()=>{if(partyAcceptPending)sendSocial({t:'socialPartyGet'})},700)}
+ else toast('Party invitation declined.');
+}
 function answerPartyInvite(accept){
  const invite=activePartyInvite;if(!invite)return;
- if(invite.expiresAt<Date.now()){activePartyInvite=null;toast('That party invitation has expired.');return}
- if(!sendSocial({t:'socialPartyInviteResponse',inviteId:invite.inviteId,accept:!!accept})){toast('Friends connection is reconnecting. Please try the invitation again.');return}
- activePartyInvite=null;
- const dlg=document.getElementById('socialPartyInviteDialog');if(dlg){dlg.style.display='none';dlg.setAttribute('aria-hidden','true')}
- if(accept){partyAcceptPending=true;toast('Accepting party invitation...');clearTimeout(partyAcceptTimer);partyAcceptTimer=setTimeout(()=>{if(partyAcceptPending)sendSocial({t:'socialPartyGet'})},700);return}
- toast('Party invitation declined.');
+ if(invite.expiresAt<Date.now()){activePartyInvite=null;closePartyInviteDialog();toast('That party invitation has expired. Ask your friend to invite you again.');return}
+ pendingPartyInviteResponse={inviteId:invite.inviteId,accept:!!accept,expiresAt:invite.expiresAt};
+ activePartyInvite=null;closePartyInviteDialog();
+ if(socialSocket&&socialSocket.readyState===WebSocket.OPEN){sendPendingPartyInviteResponse();return}
+ toast('Reconnecting to send your response...');connectSocial();
+ clearTimeout(partyInviteSendTimer);partyInviteSendTimer=setTimeout(()=>{if(pendingPartyInviteResponse){pendingPartyInviteResponse=null;toast('Could not send the response. Please ask your friend to invite you again.')}},8000);
 }
 document.getElementById('acceptSocialPartyInvite')?.addEventListener('click',()=>answerPartyInvite(true));
 document.getElementById('declineSocialPartyInvite')?.addEventListener('click',()=>answerPartyInvite(false));
