@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v79.2-party-delivery-ack';
+const MAYDAY_BUILD='v79.3-party-social-sync';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1174,7 +1174,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
   if(m.t==='socialAuthError'){try{localStorage.removeItem(SOCIAL_IDENTITY_KEY)}catch{}socialIdentity=null;socialSocket.send(JSON.stringify({t:'socialHello',name:document.getElementById('name')?.value||'Pilot'}));return}
   if(m.t==='socialWelcome'){socialProfile=m.profile;socialIdentity={id:m.profile.id,token:m.profileToken};try{localStorage.setItem(SOCIAL_IDENTITY_KEY,JSON.stringify(socialIdentity))}catch{}const nameInput=document.getElementById('name');if(m.profile.name&&(!nameInput.value||nameInput.value==='Pilot'))nameInput.value=m.profile.name;else if(nameInput.value&&nameInput.value!==m.profile.name)setTimeout(()=>sendSocial({t:'socialRename',name:nameInput.value}),0);paintAllSocialPanels();if(pendingRoomConnect){const next=pendingRoomConnect;pendingRoomConnect=null;setTimeout(()=>connect(next),0)}return}
   if(m.t==='socialState'){const previous=new Map((socialSnapshot.friends||[]).map(f=>[f.id,f.online]));socialProfile=m.profile||socialProfile;socialSnapshot={friends:m.friends||[],incomingRequests:m.incomingRequests||[],outgoingRequests:m.outgoingRequests||[]};paintAllSocialPanels();for(const f of socialSnapshot.friends){if(f.online&&!previous.get(f.id)&&previous.has(f.id))toast(`${f.name} is online`)}return}
-  if(m.t==='socialActionResult'){if(m.message)toast(m.message);const root=document.getElementById('friendsSidebarPanel');socialFeedback(root,m.message);return}
+  if(m.t==='socialActionResult'){if(m.message)toast(m.message);const root=document.getElementById('friendsSidebarPanel');socialFeedback(root,m.message);if(m.ok===false)console.warn('[MAYDAY social] action rejected:',m.message);return}
   if(m.t==='socialPartyState'){socialParty=m.party||null;paintAllSocialPanels();const q=document.getElementById('quickMatch');if(q&&['ffa','clash','survivor'].includes(selectedMode))q.textContent=socialParty?(socialParty.leaderId===socialProfile?.id?'PLAY ONLINE WITH PARTY ('+socialParty.members.length+')':'WAIT FOR PARTY LEADER'):'PLAY ONLINE';if(socialParty)toast('Party ready: '+socialParty.members.map(x=>x.name).join(', '));return}
   if(m.t==='socialPartyInvite'){sendSocial({t:'socialPartyInviteReceived',inviteId:m.inviteId});showPartyInvitePrompt(m);return}
   if(m.t==='socialPartyQueueRequest'){matchmakingMode=m.mode;errEl.textContent='';matchmakingActive=true;updateMatchmakingUi('connecting',{mode:m.mode});connect({t:'matchmake',mode:m.mode,partyId:m.partyId});return}
@@ -1185,7 +1185,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
   if(ws===socialSocket&&!String(m.t||'').startsWith('social')){handleGameMessage(socialSocket,{t:'join',inviteId:joiningSocialInviteId},ev.data);return}
  };
  socialSocket.onerror=()=>{socialSocketConnecting=false};
- socialSocket.onclose=ev=>{socialSocketConnecting=false;if(ev.code===4001)return;const wasGame=ws===socialSocket;if(wasGame){ws=null;if(roomCode){toast('Connection lost. Use CONTINUE LAST GAME after MAYDAY reconnects.');renderRecoveryPanel()}if(joiningSocialInviteId)finishSocialInviteJoin(false,'','The friends/game connection closed during the room handoff.')}socialSocket=null;setTimeout(()=>{if(!socialSocket||socialSocket.readyState===WebSocket.CLOSED)connectSocial()},2200)};
+ socialSocket.onclose=ev=>{socialSocketConnecting=false;if(ev.code===4001)return;const wasGame=ws===socialSocket;if(wasGame){ws=null;if(roomCode){toast('Connection lost. Use CONTINUE LAST GAME after MAYDAY reconnects.');renderRecoveryPanel()}if(joiningSocialInviteId)finishSocialInviteJoin(false,'','The friends/game connection closed during the room handoff.')}socialSocket=null;setTimeout(()=>{if(!socialSocket||socialSocket.readyState===WebSocket.CLOSED)connectSocial()},1200)};
 }
 function reportSocialStatus(status,code=roomCode){sendSocial({t:'socialStatus',status,roomCode:status==='lobby'?'':code});paintAllSocialPanels()}
 let activePartyInvite=null;
