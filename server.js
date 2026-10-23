@@ -188,6 +188,12 @@ function handleSocialMessage(ws,m){
     party.members.add(profile.id);publishParty(party);send(ws,{t:'socialActionResult',ok:true,message:`Joined ${socialStore.profiles[party.leaderId]?.name||'the'} party.`});return
   }
   if(m.t==='socialPartyLeave'){removePartyMember(profile.id);send(ws,{t:'socialPartyState',party:null});return}
+  if(m.t==='socialPartyCancel'){
+    const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
+    if(!party)return;
+    for(const id of party.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyQueueCancelRequest'})}
+    return
+  }
   if(m.t==='socialPartyStart'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id)),mode=String(m.mode||'');
     if(!party||party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can start matchmaking.'});
