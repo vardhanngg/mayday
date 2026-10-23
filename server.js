@@ -329,15 +329,22 @@ function addAIPilot(r){
     mh:HP[ty],hp:HP[ty],alive:false,inRound:false,prot:0,sc:0,kills:0,deaths:0,damage:0,shieldUses:0,
     respawnTimer:null,shields:3,shieldUntil:0,livesRemaining:r.mode==='survivor'?(r.lives||1):null,eliminated:false,
     p:[0,850,0],q:[0,0,0,1],lockTarget:null,lockSince:0,lockLastAt:0,shots:0,missiles:0,flares:3,
-    aiYaw:Math.random()*Math.PI*2,aiPitch:0,aiTurnDir:Math.random()<.5?-1:1,
-    aiSkill:.34+Math.random()*.24,aiNextShot:Date.now()+500+Math.random()*1100,aiTargetId:null
+    aiYaw:Math.random()*Math.PI*2,aiPitch:0,aiRoll:0,aiTurnDir:Math.random()<.5?-1:1,
+    aiSkill:.34+Math.random()*.24,aiNextShot:Date.now()+500+Math.random()*1100,aiTargetId:null,
+    aiManeuver:'cruise',aiManeuverUntil:Date.now()+1800+Math.random()*2600,aiPhase:Math.random()*Math.PI*2,
+    aiBreakCooldown:Date.now()+3500+Math.random()*5000,aiAttackPass:0
   };
   return r.players[id];
 }
 function aiHashText(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function aiSeededRand(seed){seed=((seed>>>0)^0x9e3779b9)>>>0;seed=Math.imul(seed^(seed>>>16),0x45d9f3b);seed=Math.imul(seed^(seed>>>16),0x45d9f3b);seed=(seed^(seed>>>16))>>>0;return seed/4294967296}
 const AI_SPAWN_ZONES=[{x:-5200,z:-500},{x:5200,z:500},{x:-3600,z:3900},{x:3600,z:-3900},{x:-1200,z:-5200},{x:1200,z:5200}];
-function aiQuaternion(yaw,pitch){const yh=yaw/2,ph=pitch/2,sy=Math.sin(yh),cy=Math.cos(yh),sp=Math.sin(ph),cp=Math.cos(ph);return [sp*cy,sy*cp,-sy*sp,cy*cp]}
+function aiQuaternion(yaw,pitch,roll=0){
+  // Yaw, pitch and bank are composed as a normalized aircraft attitude quaternion.
+  const hy=yaw/2,hp=pitch/2,hr=roll/2;
+  const sy=Math.sin(hy),cy=Math.cos(hy),sp=Math.sin(hp),cp=Math.cos(hp),sr=Math.sin(hr),cr=Math.cos(hr);
+  return [sp*cy*cr+cp*sy*sr,cp*sy*cr-sp*cy*sr,cp*cy*sr-sp*sy*cr,cp*cy*cr+sp*sy*sr];
+}
 function aiSpawnPosition(r,p){
   if(r.mode!=='clash'){
     const x=(Math.random()-.5)*2400,z=(Math.random()-.5)*2400;
@@ -570,16 +577,38 @@ function runAIPilots(now=Date.now()){
       bot.aiTargetId=target.id;
       let dx=target.p[0]-bot.p[0],dy=target.p[1]-bot.p[1],dz=target.p[2]-bot.p[2];
       let dist=Math.max(1,Math.hypot(dx,dy,dz)),horizontal=Math.max(1,Math.hypot(dx,dz));
-      const baseYaw=Math.atan2(-dx,-dz);
-      let desiredYaw=baseYaw+(dist<1000?bot.aiTurnDir*.48:0);const edge=5600;if(Math.abs(bot.p[0])>edge||Math.abs(bot.p[2])>edge){desiredYaw=Math.atan2(-bot.p[0],bot.p[2]);bot.aiTurnDir=bot.p[0]*Math.cos(bot.aiYaw)+bot.p[2]*Math.sin(bot.aiYaw)>0?-1:1;}
+      const baseYaw=Math.atan2(-dx,-dz),edge=5400;
+      bot.aiPhase=(Number.isFinite(bot.aiPhase)?bot.aiPhase:0)+dt*(.35+(bot.aiSkill||.4)*.5);
+      if(!Number.isFinite(bot.aiManeuverUntil)||now>=bot.aiManeuverUntil){
+        const roll=Math.random();
+        bot.aiManeuver=dist<1150?(roll<.32?'break-turn':roll<.58?'scissors':roll<.78?'vertical-extension':'attack-pass'):(roll<.24?'climb':roll<.45?'dive':roll<.68?'wide-turn':roll<.84?'barrel-bank':'cruise');
+        bot.aiManeuverUntil=now+(bot.aiManeuver==='break-turn'?850+Math.random()*900:1500+Math.random()*3300);
+      }
+      let desiredYaw=baseYaw;
+      const weave=Math.sin(bot.aiPhase*1.7+(bot.id%7))*0.11;
+      if(bot.aiManeuver==='break-turn'){desiredYaw+=bot.aiTurnDir*(.9+Math.min(1.1,1800/dist));}
+      else if(bot.aiManeuver==='scissors'){desiredYaw+=bot.aiTurnDir*(1.05+Math.sin(bot.aiPhase*3)*.32);}
+      else if(bot.aiManeuver==='wide-turn'){desiredYaw+=bot.aiTurnDir*.42+weave;}
+      else if(bot.aiManeuver==='attack-pass'){desiredYaw+=bot.aiTurnDir*.16+weave*.4;}
+      else if(bot.aiManeuver==='barrel-bank'){desiredYaw+=Math.sin(bot.aiPhase*2.2)*.52;}
+      else desiredYaw+=weave;
+      if(dist<800&&bot.aiManeuver==='attack-pass')desiredYaw+=bot.aiTurnDir*.25;
+      if(Math.abs(bot.p[0])>edge||Math.abs(bot.p[2])>edge){desiredYaw=Math.atan2(-bot.p[0],bot.p[2]);bot.aiTurnDir=bot.p[0]*Math.cos(bot.aiYaw)+bot.p[2]*Math.sin(bot.aiYaw)>0?-1:1;bot.aiManeuver='recover';bot.aiManeuverUntil=now+1700;}
       bot.aiYaw=Number.isFinite(bot.aiYaw)?bot.aiYaw:baseYaw;
-      bot.aiPitch=Number.isFinite(bot.aiPitch)?bot.aiPitch:0;
-      bot.aiYaw+=aiClamp(aiAngleDelta(bot.aiYaw,desiredYaw),-1.7*dt,1.7*dt);
-      const desiredPitch=aiClamp(Math.atan2(dy,horizontal)*.42,-.28,.28);
-      bot.aiPitch+=aiClamp(desiredPitch-bot.aiPitch,-.48*dt,.48*dt);
-      bot.q=aiQuaternion(bot.aiYaw,bot.aiPitch);
+      bot.aiPitch=Number.isFinite(bot.aiPitch)?bot.aiPitch:0;bot.aiRoll=Number.isFinite(bot.aiRoll)?bot.aiRoll:0;
+      const turnRate=bot.aiManeuver==='break-turn'||bot.aiManeuver==='scissors'?2.15:1.35+(bot.aiSkill||.4)*.55;
+      bot.aiYaw+=aiClamp(aiAngleDelta(bot.aiYaw,desiredYaw),-turnRate*dt,turnRate*dt);
+      let desiredPitch=aiClamp(Math.atan2(dy,horizontal)*.48,-.34,.34);
+      if(bot.aiManeuver==='climb')desiredPitch=Math.max(desiredPitch,.23+Math.sin(bot.aiPhase)*.08);
+      else if(bot.aiManeuver==='dive')desiredPitch=Math.min(desiredPitch,-.2+Math.sin(bot.aiPhase)*.06);
+      else if(bot.aiManeuver==='vertical-extension')desiredPitch=Math.sin(bot.aiPhase*1.6)*.34;
+      else if(bot.aiManeuver==='recover')desiredPitch=aiClamp((850-bot.p[1])*.001,-.2,.2);
+      bot.aiPitch+=aiClamp(desiredPitch-bot.aiPitch,-.58*dt,.58*dt);
+      const bankTarget=aiClamp(-aiAngleDelta(bot.aiYaw,desiredYaw)*1.7,-.68,.68)+(bot.aiManeuver==='barrel-bank'?Math.sin(bot.aiPhase*4)*.52:0);
+      bot.aiRoll+=aiClamp(bankTarget-bot.aiRoll,-1.8*dt,1.8*dt);
+      bot.q=aiQuaternion(bot.aiYaw,bot.aiPitch,bot.aiRoll);
       const cp=Math.cos(bot.aiPitch),forward=[-Math.sin(bot.aiYaw)*cp,Math.sin(bot.aiPitch),-Math.cos(bot.aiYaw)*cp];
-      const speed=dist<700?95:dist<1800?145:185;
+      const speed=bot.aiManeuver==='climb'?165:bot.aiManeuver==='dive'?205:dist<700?105:dist<1800?155:190;
       bot.p[0]=aiClamp(bot.p[0]+forward[0]*speed*dt,-6000,6000);
       bot.p[1]=aiClamp(bot.p[1]+forward[1]*speed*dt,360,1750);
       bot.p[2]=aiClamp(bot.p[2]+forward[2]*speed*dt,-6000,6000);
