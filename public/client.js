@@ -1156,6 +1156,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
   if(m.t==='socialPartyState'){socialParty=m.party||null;paintAllSocialPanels();const q=document.getElementById('quickMatch');if(q&&['ffa','clash','survivor'].includes(selectedMode))q.textContent=socialParty?(socialParty.leaderId===socialProfile?.id?'PLAY ONLINE WITH PARTY ('+socialParty.members.length+')':'WAIT FOR PARTY LEADER'):'PLAY ONLINE';if(socialParty)toast('Party ready: '+socialParty.members.map(x=>x.name).join(', '));return}
   if(m.t==='socialPartyInvite'){const accept=window.confirm(m.fromName+' invited you to play online with their party. Accept?');sendSocial({t:'socialPartyInviteResponse',inviteId:m.inviteId,accept});return}
   if(m.t==='socialPartyQueueRequest'){matchmakingMode=m.mode;errEl.textContent='';matchmakingActive=true;updateMatchmakingUi('connecting',{mode:m.mode});connect({t:'matchmake',mode:m.mode,partyId:m.partyId});return}
+  if(m.t==='socialPartyQueueCancelRequest'){cancelMatchmaking(true);return}
   if(m.t==='socialInvite'){incomingSocialInvites.push(m);showNextSocialInvite();return}
   if(m.t==='socialInviteResult'){if(m.message)toast(m.message);return}
   if(m.t==='socialJoinRoom'){inviteDebug('socialJoinRoom received',`id=${String(m.inviteId||'').slice(0,8)} room=${m.roomCode||'-'} state=${m.state||'-'}`);joinInvitedRoom(m.roomCode,m.inviteId);return}
@@ -1260,7 +1261,8 @@ function updateMatchmakingUi(state='idle',data={}){
   if(join)join.style.display=onlineMode?'inline-block':'none';
   if(cancel)cancel.style.display='none';
 }
-function cancelMatchmaking(){
+function cancelMatchmaking(fromParty=false){
+  if(socialParty&&!fromParty)sendSocial({t:'socialPartyCancel'});
   pendingRoomConnect=null;
   const socket=ws;
   if(socket&&socket!==socialSocket){
