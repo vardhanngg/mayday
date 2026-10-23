@@ -27,10 +27,10 @@ function makeClient(url) {
   socket.on('message', raw => {
     let message;
     try { message = JSON.parse(raw.toString()); } catch { return; }
-    events.push(message);
+    const messageIndex = events.push(message) - 1;
     for (let i = waiters.length - 1; i >= 0; i--) {
       const waiter = waiters[i];
-      if (!waiter.predicate(message)) continue;
+      if (messageIndex < waiter.afterIndex || !waiter.predicate(message)) continue;
       clearTimeout(waiter.timer);
       waiters.splice(i, 1);
       waiter.resolve(message);
@@ -44,11 +44,11 @@ function makeClient(url) {
       socket.once('open', resolve);
       socket.once('error', reject);
     }),
-    waitFor(predicate, timeoutMs = 6000) {
-      const old = events.find(predicate);
+    waitFor(predicate, timeoutMs = 6000, afterIndex = 0) {
+      const old = events.slice(afterIndex).find(predicate);
       if (old) return Promise.resolve(old);
       return new Promise((resolve, reject) => {
-        const waiter = {predicate, resolve, reject, timer: null};
+        const waiter = {predicate, resolve, reject, timer: null, afterIndex};
         waiter.timer = setTimeout(() => {
           const index = waiters.indexOf(waiter);
           if (index >= 0) waiters.splice(index, 1);
@@ -225,6 +225,7 @@ test('a party cannot start a different mode while already matchmaking', async t 
 test('a party queue deadline cancels the search when one member never joins', async t => {
   await withServer(t, async (url, clients) => {
     const party = await createParty(url, clients);
+    const stateAfterIndex = party.leader.events.length;
     party.leader.send({t:'socialPartyStart', mode:'survivor'});
     await Promise.all([
       party.leader.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor'),
@@ -246,7 +247,7 @@ test('a party queue deadline cancels the search when one member never joins', as
     assert.match(cancelled.message, /not every member joined/i);
 
     const state = await party.leader.waitFor(m =>
-      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode);
+      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode, 6000, stateAfterIndex);
     assert.equal(state.party.mode, '', 'party state must reset after the incomplete search is cancelled');
   }, 5000, 1200);
 });
@@ -254,6 +255,7 @@ test('a party queue deadline cancels the search when one member never joins', as
 test('disconnecting one queued pilot cancels the whole party search', async t => {
   await withServer(t, async (url, clients) => {
     const party = await createParty(url, clients);
+    const stateAfterIndex = party.leader.events.length;
     party.leader.send({t:'socialPartyStart', mode:'survivor'});
     await Promise.all([
       party.leader.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor'),
@@ -288,7 +290,7 @@ test('disconnecting one queued pilot cancels the whole party search', async t =>
     assert.match(cancelled.message, /party member disconnected/i);
 
     const state = await party.leader.waitFor(m =>
-      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode);
+      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode, 6000, stateAfterIndex);
     assert.equal(state.party.mode, '', 'disconnection must release the party search state');
   });
 });
@@ -296,6 +298,7 @@ test('disconnecting one queued pilot cancels the whole party search', async t =>
 test('party matchmaking state resets after seating so the party can search again', async t => {
   await withServer(t, async (url, clients) => {
     const party = await createParty(url, clients);
+    const stateAfterIndex = party.leader.events.length;
     party.leader.send({t:'socialPartyStart', mode:'survivor'});
     await Promise.all([
       party.leader.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor'),
@@ -323,7 +326,7 @@ test('party matchmaking state resets after seating so the party can search again
       memberGame.waitFor(m => m.t==='matchmaking' && m.status==='matched' && m.mode==='survivor')
     ]);
     const reset = await party.leader.waitFor(m =>
-      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode);
+      m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode, 6000, stateAfterIndex);
     assert.equal(reset.party.mode, '', 'seating in a match must reset party.mode');
 
     party.leader.send({t:'socialPartyStart', mode:'ffa'});
