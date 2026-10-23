@@ -456,7 +456,16 @@ function selectMatchBatch(mode,target,partial=false){
 }
 function createQuickMatch(mode,batch){
   const cfg=MATCHMAKING[mode];
-  const eligible=batch.filter(entry=>entry.ws.readyState===1&&entry.ws.matchmakingEntry===entry&&!entry.ws.room);
+  let eligible=batch.filter(entry=>entry.ws.readyState===1&&entry.ws.matchmakingEntry===entry&&!entry.ws.room);
+  // If any party member drops at the last moment, never seat the remaining members
+  // separately; return the surviving party members to the lobby with a clear error.
+  for(const partyId of new Set(eligible.map(e=>e.partyId).filter(Boolean))){
+    const party=socialParties.get(partyId),group=eligible.filter(e=>e.partyId===partyId);
+    if(!party||group.length!==party.members.size||group.some(e=>!party.members.has(e.profileId))){
+      for(const e of group)send(e.ws,{t:'matchmaking',status:'error',mode,message:'A party member disconnected before the match started. Invite everyone and search again.'});
+      eligible=eligible.filter(e=>e.partyId!==partyId);
+    }
+  }
   for(const entry of batch)if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null;
   if(eligible.length<cfg.minPlayers){
     for(const entry of eligible)send(entry.ws,{t:'matchmaking',status:'error',mode,message:'Not enough pilots remained connected. Search again to find a match.'});
