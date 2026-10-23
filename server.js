@@ -640,7 +640,12 @@ wss.on('connection',ws=>{
       const token=String(m.session||'');
       const candidate=rr&&Object.values(rr.players).find(p=>p.sessionToken===token);
       if(!rr||!candidate)return send(ws,{t:'err',m:'That MAYDAY match is no longer available for reconnect.'});
-      if(candidate.connected&&candidate.ws&&candidate.ws!==ws)return send(ws,{t:'err',m:'That MAYDAY session is already connected.'});
+      if(candidate.connected&&candidate.ws&&candidate.ws!==ws){
+        // The browser may have lost its transport while the server still considers
+        // the old socket connected. A valid session token proves this reconnect is
+        // the same pilot, so retire the stale socket and let the new one take over.
+        try{candidate.ws.close(4001,'session resumed on a new connection')}catch(e){try{candidate.ws.terminate()}catch{}}
+      }
       clearTimeout(candidate.reconnectTimer);candidate.reconnectTimer=null;candidate.ws=ws;candidate.connected=true;candidate.disconnectedAt=0;ws.id=candidate.id;ws.room=rr.code;ws.sessionToken=candidate.sessionToken;ws.profileId=candidate.profileId||null;
       send(ws,{t:'welcome',id:candidate.id,code:rr.code,roomId:rr.code,mode:rr.mode,session:candidate.sessionToken,resumed:true});
       send(ws,{t:'resume',mode:rr.mode,state:rr.state,round:rr.round,score:rr.score,lives:rr.lives||1,alive:candidate.alive,eliminated:candidate.eliminated});
