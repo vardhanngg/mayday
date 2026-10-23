@@ -1278,15 +1278,16 @@ function renderMatchResults(m){
  <div class="resultsCard"><div class="resultsHeadline">🏆 ${title}</div><div class="resultsSub">Match MVP · <span style="color:${mvp.c||'#ffd166'}">${esc(mvp.n||'MVP')}</span></div></div>
  <div class="resultsGrid"><div class="resultsCard"><h2>${m.mode==='clash'?'SQUAD RANKINGS':'PILOT RANKING'}</h2><div class="rankRow"><span class="statHead">#</span><span class="statHead">${m.mode==='clash'?'SQUAD':'PILOT'}</span><span class="statHead">${m.mode==='clash'?'RDS':'K'}</span><span class="statHead">${m.mode==='clash'?'K':'DMG'}</span></div>${rankRows||'<div style="opacity:.6">No ranking data.</div>'}</div>
  <div class="resultsCard"><h2>PLAYER STATS</h2><div class="playerRow"><span class="statHead">#</span><span class="statHead">PILOT</span><span class="statHead">K</span><span class="statHead">D</span><span class="statHead">DMG</span><span class="statHead">SHD</span><span class="statHead">MSL</span><span class="statHead">FLR</span></div>${rows||'<div style="opacity:.6">No player data.</div>'}</div></div>
- <div class="resultActions">${m.mode==='ffa'?'<button id="again">PLAY DOGFIGHT AGAIN</button>':isHost?'<button id="again">PLAY AGAIN</button>':'<div style="opacity:.65;margin-bottom:8px">Waiting for the host to start another game...</div>'}<br><button id="matchExit" class="navBtn">EXIT TO MAIN MENU</button></div></div>`;
+ <div class="resultActions"><button id="again">PLAY ${m.mode==='ffa'?'DOGFIGHT':m.mode==='survivor'?'SURVIVOR':'CLASH SQUAD'} AGAIN</button><br><button id="matchExit" class="navBtn">EXIT TO MAIN MENU</button></div></div>`;
  winEl.style.display='flex';
  const ab=document.getElementById('again');if(ab)ab.onclick=()=>{
-   if(m.mode==='ffa'){
-     leaveRoom('game',false);
-     selectedMode='ffa';matchmakingMode='ffa';
-     updateMatchmakingUi('connecting',{mode:'ffa'});
-     setTimeout(()=>connect({t:'matchmake',mode:'ffa'}),250);
-   }else if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({t:'again'}));
+   const nextMode=['ffa','survivor','clash'].includes(m.mode)?m.mode:'ffa';
+   // A completed online match should lead to a fresh public search, not reopen
+   // the old room with the same roster. Tear down the old room/socket first.
+   leaveRoom('game',false);
+   selectedMode=nextMode;matchmakingMode=nextMode;
+   updateMatchmakingUi('connecting',{mode:nextMode});
+   setTimeout(()=>connect({t:'matchmake',mode:nextMode}),250);
  };const meb=document.getElementById('matchExit');if(meb)meb.onclick=()=>leaveRoom('game');
 }
 function startPractice(){
