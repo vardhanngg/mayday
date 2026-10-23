@@ -279,6 +279,8 @@ function openSettings(){
 }
 function closeSettings(){
   const p=document.getElementById('settingsPanel');if(p)p.style.display='none';
+  // Pointer lock must be requested by the user's close click, never while
+  // they are still interacting with settings controls.
   if(inGame&&mouseControls&&!mobileTouchEnabled)requestMaydayPointerLock();
 }
 document.addEventListener('pointerlockchange',updateMaydayPointerLockUi);
@@ -1312,9 +1314,20 @@ document.getElementById('openSettings')?.addEventListener('click',openSettings);
 document.getElementById('gameSettingsBtn')?.addEventListener('click',openSettings);
 document.getElementById('closeSettings')?.addEventListener('click',closeSettings);
 document.getElementById('settingsPanel')?.addEventListener('click',e=>{if(e.target.id==='settingsPanel')closeSettings()});
-document.getElementById('mouseControls')?.addEventListener('change',e=>{mouseControls=e.target.checked;saveMaydaySettings();if(inGame){if(mouseControls&&!mobileTouchEnabled)requestMaydayPointerLock();else unlockMaydayPointer()}});
+document.getElementById('mouseControls')?.addEventListener('change',e=>{
+  mouseControls=e.target.checked;saveMaydaySettings();
+  // Never recapture the pointer from inside the settings panel. The player
+  // must be able to finish changing settings and click CLOSE explicitly.
+  if(inGame)unlockMaydayPointer();
+});
 document.getElementById('mouseSensitivity')?.addEventListener('input',e=>{mouseSensitivity=Math.max(1,Math.min(200,Number(e.target.value)||100));const v=document.getElementById('mouseSensitivityValue');if(v)v.textContent=Math.round(mouseSensitivity)+'%';saveMaydaySettings()});
-addEventListener('pointerdown',e=>{initAudio();if(!inGame)setMusic(true);else if(!mobileTouchEnabled&&mouseControls&&!pointerLocked&&!e.target.closest('#settingsPanel,#gameSettingsBtn,#exitPracticeBtn,#killReplayBtn,#friendsSidebar,#friendsToggle,#socialInviteDialog,#confirmDialog,#mobileControls'))requestMaydayPointerLock()},{once:false});
+addEventListener('pointerdown',e=>{
+  initAudio();if(!inGame){setMusic(true);return}
+  // Results, settings, dialogs and HUD controls must remain clickable. Only
+  // reacquire pointer lock from an actual gameplay surface click.
+  if(e.target.closest('#win,#settingsPanel,#gameSettingsBtn,#exitPracticeBtn,#killReplayBtn,#friendsSidebar,#friendsToggle,#socialInviteDialog,#confirmDialog,#mobileControls,#leaveRoom'))return;
+  if(!mobileTouchEnabled&&mouseControls&&!pointerLocked)requestMaydayPointerLock();
+},{once:false});
 setMusic(true);connectSocial();
 setInterval(()=>{if(ws&&plane&&alive&&!killReplayActive&&ws.readyState===1)ws.send(JSON.stringify({t:'s',p:plane.position.toArray(),q:plane.quaternion.toArray()}))},50);
 let specId=null;
