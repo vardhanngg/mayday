@@ -143,7 +143,7 @@ function handleSocialMessage(ws,m){
     const active=Object.values(rooms).find(r=>roomContainsProfile(r,profile.id));
     if(active){profile.roomCode=active.code;profile.mode=active.mode;profile.roomState=active.state;profile.status=[...active.spectators].some(sw=>sw.profileId===profile.id)?'spectating':(active.state==='playing'?'playing':active.state==='between'?'between':active.state==='over'?'results':'room')}
     else {profile.status='lobby';profile.roomCode='';profile.mode='';profile.roomState=''}
-    send(ws,{t:'socialWelcome',profile:{id:profile.id,code:profile.code,name:profile.name},profileToken:token});sendSocialState(profile);refreshSocialNeighborhood(profile);for(const inv of pendingPartyInvites.values()){if(inv.toId===profile.id&&inv.expiresAt>Date.now()){const sender=socialStore.profiles[inv.fromId];send(ws,{t:'socialPartyInvite',inviteId:inv.inviteId,partyId:inv.partyId,fromId:inv.fromId,fromName:sender?.name||'A friend',expiresAt:inv.expiresAt})}}return
+    send(ws,{t:'socialWelcome',profile:{id:profile.id,code:profile.code,name:profile.name},profileToken:token});sendSocialState(profile);refreshSocialNeighborhood(profile);const existingParty=[...socialParties.values()].find(p=>p.members.has(profile.id));send(ws,{t:'socialPartyState',party:existingParty?partySnapshot(existingParty):null});for(const inv of pendingPartyInvites.values()){if(inv.toId===profile.id&&inv.expiresAt>Date.now()){const sender=socialStore.profiles[inv.fromId];send(ws,{t:'socialPartyInvite',inviteId:inv.inviteId,partyId:inv.partyId,fromId:inv.fromId,fromName:sender?.name||'A friend',expiresAt:inv.expiresAt})}}return
   }
   const profile=socialStore.profiles[ws.socialProfileId];if(!profile||socialSockets.get(profile.id)!==ws)return;
   if(m.t==='socialRename'){
@@ -239,7 +239,7 @@ function handleSocialMessage(ws,m){
   if(m.t==='socialPartyCancel'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(!party)return;
-    for(const id of party.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyQueueCancelRequest'})}
+    for(const id of party.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1){send(sw,{t:'socialPartyQueueCancelRequest'});send(sw,{t:'socialPartyState',party:partySnapshot(party)})}}
     return
   }
   if(m.t==='socialPartyStart'){
