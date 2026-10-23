@@ -260,7 +260,9 @@ function handleSocialMessage(ws,m){
         send(ws,{t:'welcome',id:existing.id,code:r.code,roomId:r.code,mode:r.mode,session:existing.sessionToken,inviteId});
         send(ws,info(r));rcast(r,info(r));broadcastGames();
         console.log(`[invite ${BUILD_VERSION}] reclaimed existing pilot id=${inviteId.slice(0,8)} room=${r.code} profile=${profile.code}`);
-        pendingSocialInvites.delete(inviteId);return;
+        // Keep the invite record until the client reports socialJoinComplete. Deleting it
+        // here made a successful reclaimed join look unconfirmed to both friends.
+        return;
       }
       // Use the already-open social socket for the room handoff. This avoids a second
       // WebSocket opening race that previously caused accepted invites to time out.
