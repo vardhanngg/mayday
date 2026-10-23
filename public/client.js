@@ -1296,7 +1296,7 @@ document.getElementById('backFromJoin').onclick=()=>{document.getElementById('jo
 document.getElementById('join').onclick=()=>{const c=document.getElementById('code').value.trim().toUpperCase();if(!/^[A-Z0-9]{4}$/.test(c)){errEl.textContent='Enter the 4-character Game Code.';document.getElementById('code').focus();return}connect({t:'join',roomId:c,code:c})};
 renderRecoveryPanel();setInterval(()=>{if(ws?.sessionToken&&ws.readyState===1&&!intentionalDisconnect)saveRecoverySession()},30000);
 document.getElementById('leaveRoom').onclick=()=>leaveRoom('room');
-document.getElementById('exitPracticeBtn')?.addEventListener('click',()=>{if(practiceMode)exitActiveMatch()});
+document.getElementById('exitPracticeBtn')?.addEventListener('click',()=>{if(inGame)exitActiveMatch()});
 document.getElementById('start').onclick=()=>ws.send(JSON.stringify({t:'start'}));
 document.getElementById('name')?.addEventListener('change',()=>{saveSet();if(socialSocket&&socialSocket.readyState===WebSocket.OPEN)sendSocial({t:'socialRename',name:document.getElementById('name').value||'Pilot'})});
 document.getElementById('openSettings')?.addEventListener('click',openSettings);
