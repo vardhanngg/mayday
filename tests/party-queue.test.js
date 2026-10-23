@@ -336,3 +336,73 @@ test('party matchmaking state resets after seating so the party can search again
     ]);
   }, 500, 2500);
 });
+
+
+test('direct party invitation is delivered and acceptance updates both authoritative rosters', async t => {
+  await withServer(t, async (url, clients) => {
+    const leader = makeClient(url);
+    clients.push(leader);
+    await leader.opened;
+    leader.send({t:'socialHello', name:'Direct Invite Leader'});
+    const leaderWelcome = await leader.waitFor(m => m.t==='socialWelcome');
+
+    const member = makeClient(url);
+    clients.push(member);
+    await member.opened;
+    member.send({t:'socialHello', name:'Direct Invite Member'});
+    const memberWelcome = await member.waitFor(m => m.t==='socialWelcome');
+
+    leader.send({t:'socialAddFriend', code:memberWelcome.profile.code});
+    await leader.waitFor(m => m.t==='socialActionResult' && /friend request sent/i.test(m.message||''));
+    await member.waitFor(m => m.t==='socialState' &&
+      (m.incomingRequests||[]).some(friend => friend.id===leaderWelcome.profile.id));
+
+    member.send({t:'socialFriendResponse', profileId:leaderWelcome.profile.id, accept:true});
+    await Promise.all([
+      leader.waitFor(m => m.t==='socialState' && (m.friends||[]).some(friend => friend.id===memberWelcome.profile.id)),
+      member.waitFor(m => m.t==='socialState' && (m.friends||[]).some(friend => friend.id===leaderWelcome.profile.id))
+    ]);
+
+    leader.send({t:'socialPartyInvite', friendId:memberWelcome.profile.id});
+    const invite = await member.waitFor(m => m.t==='socialPartyInvite' && m.fromId===leaderWelcome.profile.id);
+    assert.ok(invite.inviteId, 'direct invite must have a response token');
+
+    member.send({t:'socialPartyInviteResponse', inviteId:invite.inviteId, accept:true});
+    const [leaderParty, memberParty] = await Promise.all([
+      leader.waitFor(m => m.t==='socialPartyState' && m.party?.members?.length===2),
+      member.waitFor(m => m.t==='socialPartyState' && m.party?.members?.length===2)
+    ]);
+    assert.equal(leaderParty.party.id, memberParty.party.id);
+    assert.deepEqual(
+      leaderParty.party.members.map(x=>x.id).sort(),
+      [leaderWelcome.profile.id,memberWelcome.profile.id].sort(),
+      'both clients must receive the same accepted party roster'
+    );
+  });
+});
+
+test('either party member cancelling sends cancellation to every connected party member', async t => {
+  await withServer(t, async (url, clients) => {
+    const party = await createParty(url, clients);
+    party.leader.send({t:'socialPartyStart', mode:'survivor'});
+    await Promise.all([
+      party.leader.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor'),
+      party.member.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor')
+    ]);
+
+    const leaderStateIndex = party.leader.events.length;
+    const memberStateIndex = party.member.events.length;
+    party.member.send({t:'socialPartyCancel'});
+
+    const [leaderCancel, memberCancel, leaderState, memberState] = await Promise.all([
+      party.leader.waitFor(m => m.t==='socialPartyQueueCancelRequest', 6000),
+      party.member.waitFor(m => m.t==='socialPartyQueueCancelRequest', 6000),
+      party.leader.waitFor(m => m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode, 6000, leaderStateIndex),
+      party.member.waitFor(m => m.t==='socialPartyState' && m.party?.id===party.partyId && !m.party.mode, 6000, memberStateIndex)
+    ]);
+    assert.equal(leaderCancel.t,'socialPartyQueueCancelRequest');
+    assert.equal(memberCancel.t,'socialPartyQueueCancelRequest');
+    assert.equal(leaderState.party.mode,'');
+    assert.equal(memberState.party.mode,'');
+  });
+});
