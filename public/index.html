@@ -48,6 +48,18 @@ button{margin-top:16px;padding:12px 28px;font-size:1.05rem;border:1px solid rgba
 .teamcard h3{margin:0 0 6px}.teamcard .members{min-height:44px;font-size:.9rem;line-height:1.45}.teamcard button{margin-top:8px;width:100%;padding:9px 12px;font-size:.92rem}
 @media(max-width:700px){#teamcols{grid-template-columns:repeat(2,minmax(145px,1fr));max-height:52vh}}
 @media(max-width:440px){#teamcols{grid-template-columns:1fr;max-height:55vh}}
+#lobbySquad{width:min(94vw,860px);max-width:860px;margin:12px auto 8px;padding:12px;border:1px solid rgba(150,205,255,.2);border-radius:16px;background:linear-gradient(135deg,rgba(13,31,52,.9),rgba(9,17,31,.82));box-shadow:0 12px 35px rgba(0,0,0,.22);box-sizing:border-box}
+#lobbySquadHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;text-align:left}
+#lobbySquadHead strong{font-size:.9rem;letter-spacing:.1em}
+#lobbySquadHead small{opacity:.7;font-size:.72rem}
+#lobbySquadSlots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.lobbySquadSlot{min-height:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid rgba(255,255,255,.12);border-radius:11px;background:rgba(255,255,255,.035);padding:8px;box-sizing:border-box}
+.lobbySquadSlot.filled{border-color:rgba(113,220,255,.34);background:rgba(64,157,207,.11)}
+.lobbySquadSlot .slotIcon{font-size:1.25rem}
+.lobbySquadSlot b{font-size:.78rem;overflow-wrap:anywhere}
+.lobbySquadSlot small{font-size:.65rem;opacity:.65}
+#lobbyPartyInviteBtn{margin:0;padding:8px 12px;font-size:.75rem;white-space:nowrap}
+@media(max-width:560px){#lobbySquad{padding:8px}#lobbySquadSlots{gap:5px}.lobbySquadSlot{min-height:60px;padding:5px}.lobbySquadSlot b{font-size:.68rem}#lobbySquadHead{align-items:flex-start}#lobbyPartyInviteBtn{padding:7px;font-size:.65rem}}
 #modePicker{margin:14px auto 8px;max-width:860px;width:min(94vw,860px)}
 #selectedModePanel{display:none;max-width:620px;margin:8px auto;padding:14px 18px;border:1px solid rgba(255,255,255,.16);border-radius:14px;background:rgba(0,0,0,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
 #selectedModeTitle{font-weight:1000;font-size:1.5rem;letter-spacing:.06em}
@@ -404,6 +416,14 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
 <label style="display:block;margin:10px;font-size:1.05rem"><input type="checkbox" id="inv" style="width:18px;height:18px;vertical-align:middle"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label>
 <p><b>PC:</b> W accelerate · S brake · ↑/↓ pitch · A/D tilt · ←/→ turn · SPACE shoot · F missile · R flares · SHIFT boost. <b>Phones:</b> use the on-screen flight stick and action buttons; drag the open sky to look around. Use HUD SETTINGS to resize, fade, hide, or save layouts; ⚙ MOBILE adjusts sensitivity, handling, graphics, FPS, auto-level and vibration.</p>
 <p><b>Hold enemy in sights 3s = LOCK</b> · <b>Lock limit 4.2 km</b> · clouds can break lock · <b>O</b> hide/show sensitivity + settings · <b>C</b> camera · <b>Hold X</b> rear view · <b>I</b> invert pitch · <b>Tab</b> spectate · <b>Hold G for 1 second</b> to send a room-wide “MAYDAY” alert (Clash Squad) · <b>P</b> replay your last death when available · <b>Q</b> shield (Clash Squad, 7s) · <b>R</b> countermeasures · <b>SETTINGS</b> = optional mouse controls</p><p>🌲 Forests · ✈ 2 neutral air-landing runways with green edge lights · 🧭 Rotating map by default · <b>M</b> toggles North-up · 💥 crash fire & smoke</p>
+<section id="lobbySquad" aria-label="Online party">
+<div id="lobbySquadHead"><span><strong>YOUR SQUAD</strong><br><small id="lobbySquadStatus">Invite up to 3 friends before choosing a mode</small></span><button id="lobbyPartyInviteBtn" type="button" class="secondaryBtn">＋ INVITE FRIENDS</button></div>
+<div id="lobbySquadSlots">
+<div class="lobbySquadSlot filled"><span class="slotIcon">✈</span><b id="lobbySquadSlot0Name">YOU</b><small id="lobbySquadSlot0Role">PARTY LEADER</small></div>
+<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot1Name">OPEN SLOT</b><small id="lobbySquadSlot1Role">INVITE FRIEND</small></div>
+<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot2Name">OPEN SLOT</b><small id="lobbySquadSlot2Role">INVITE FRIEND</small></div>
+<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot3Name">OPEN SLOT</b><small id="lobbySquadSlot3Role">INVITE FRIEND</small></div>
+</div></section>
 <div id="modePicker">
 <div style="font-weight:1000;font-size:1.12rem;letter-spacing:.08em;margin-bottom:8px">SELECT MODE</div>
 <div class="modeGrid">
