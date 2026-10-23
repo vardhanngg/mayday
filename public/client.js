@@ -1510,6 +1510,9 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
   }
   if(shake>.01){cam.position.add(new T.Vector3((Math.random()-.5)*shake*8,(Math.random()-.5)*shake*8,(Math.random()-.5)*shake*8));shake*=Math.pow(.03,dt)}
   cam.lookAt(look);
+  // The normal flight/spectator camera above runs every frame and can overwrite
+  // replay transforms. Apply the replay last so its aircraft and camera stay in sync.
+  if(killReplayActive)advanceKillReplay(performance.now());
   cam.updateMatrixWorld();if(!killReplayActive)recordKillReplayFrame(performance.now());scene.fog.near=graphicsFogNear;scene.fog.far=graphicsFogFar;const le=document.getElementById('lock');
   if(lockId&&remotes[lockId]){const v=remotes[lockId].mesh.position.clone().project(cam);
    if(v.z<1){const ok=lockT>=3;le.style.display='block';le.style.left=((v.x*.5+.5)*innerWidth)+'px';le.style.top=((-v.y*.5+.5)*innerHeight)+'px';
