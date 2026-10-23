@@ -26,3 +26,5 @@ jobs:
         run: npm run check
       - name: Test live matchmaking protocol
         run: npm run test:matchmaking
+      - name: Test party queue synchronization
+        run: npm run test:party-queue

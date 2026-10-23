@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check public/client.js",
-    "test:matchmaking": "node --test tests/matchmaking.test.js"
+    "test:matchmaking": "node --test tests/matchmaking.test.js",
+    "test:party-queue": "node --test tests/party-queue.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
