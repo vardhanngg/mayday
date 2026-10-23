@@ -244,7 +244,7 @@ function handleSocialMessage(ws,m){
   if(m.t==='socialPartyCreateCode'){
     let party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(party&&party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can generate the party code.'});
-    if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
+    if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:'',queueState:'idle'};socialParties.set(party.id,party)}
     if(!party.code)party.code=crypto.randomBytes(3).toString('hex').toUpperCase();
     publishParty(party);send(ws,{t:'socialPartyCode',code:party.code});return
   }
