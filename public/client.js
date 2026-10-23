@@ -1197,6 +1197,10 @@ function joinInvitedRoom(code,inviteId=''){
  if(previous&&previous.readyState!==WebSocket.CLOSED){intentionalDisconnect=true;try{previous.close(1000,'left room')}catch(e){inviteDebug('old socket close failed',e?.message||String(e))}}
  clearRecoverySession();
  try{goMainMenu()}catch(e){inviteDebug('menu reset warning',e?.stack||e?.message||String(e));document.getElementById('lobby').style.display='flex';document.getElementById('menu').style.display='block';document.getElementById('room').style.display='none'}
+ // goMainMenu intentionally suppresses stale room snapshots while exiting. An invitation
+ // is the opposite transition: release that guard before the reused social socket emits
+ // welcome/room snapshots, or the invitee can remain on the normal lobby until round start.
+ roomExitInProgress=false;
  ws=socialSocket;intentionalDisconnect=false;
  const outgoing={t:'socialGameJoin',inviteId,roomCode:c,n:document.getElementById('name')?.value||socialProfile?.name||'Pilot',ty:document.getElementById('ptype')?.value||'balanced',colorId:selectedColorId,team:myTeam};
  inviteDebug('sending same-socket room handoff',`id=${String(inviteId).slice(0,8)} room=${c} socket=${socialSocket.readyState} identity=${socialIdentity?.id?'present':'missing'}`);
