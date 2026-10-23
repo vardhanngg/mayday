@@ -436,7 +436,7 @@ function removeMatchmakingEntry(ws,status='cancelled',message=''){
 }
 function queueForMatchmaking(ws,m){
   const mode=String(m.mode||''),cfg=MATCHMAKING[mode];if(!cfg)return send(ws,{t:'err',m:'Choose Dogfight, Clash Squad, or Survivor for online matchmaking.'});
-  if(ws.room)return send(ws,{t:'err',m:'Leave your current room before searching for a match.'});
+  if(ws.room){const currentRoom=rooms[ws.room];if(currentRoom)return send(ws,{t:'err',m:'Leave your current room before searching for a match.'});ws.room=null;delete ws.id;delete ws.sessionToken;}
   if(ws.matchmakingEntry){if(ws.matchmakingEntry.mode===mode&&ws.matchmakingEntry.partyId===(m.partyId||'')){publishMatchmakingQueue(mode,Date.now(),true);return}removeMatchmakingEntry(ws,'cancelled','Previous search cancelled.')}
   const identity=authProfile(m.profileId,m.profileToken);
   let partyId='';if(m.partyId){if(!identity)return send(ws,{t:'err',m:'Sign in to your MAYDAY profile before party matchmaking.'});const party=socialParties.get(String(m.partyId));if(!party||!party.members.has(identity.id)||party.mode!==mode)return send(ws,{t:'err',m:'Your party is no longer ready. Return to the lobby and invite your friends again.'});partyId=party.id;if(party.members.size>cfg.target)return send(ws,{t:'err',m:'Your party is too large for this mode.'})}
