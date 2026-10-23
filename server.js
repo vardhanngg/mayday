@@ -143,7 +143,7 @@ function handleSocialMessage(ws,m){
     const active=Object.values(rooms).find(r=>roomContainsProfile(r,profile.id));
     if(active){profile.roomCode=active.code;profile.mode=active.mode;profile.roomState=active.state;profile.status=[...active.spectators].some(sw=>sw.profileId===profile.id)?'spectating':(active.state==='playing'?'playing':active.state==='between'?'between':active.state==='over'?'results':'room')}
     else {profile.status='lobby';profile.roomCode='';profile.mode='';profile.roomState=''}
-    send(ws,{t:'socialWelcome',profile:{id:profile.id,code:profile.code,name:profile.name},profileToken:token});sendSocialState(profile);refreshSocialNeighborhood(profile);return
+    send(ws,{t:'socialWelcome',profile:{id:profile.id,code:profile.code,name:profile.name},profileToken:token});sendSocialState(profile);refreshSocialNeighborhood(profile);for(const inv of pendingPartyInvites.values()){if(inv.toId===profile.id&&inv.expiresAt>Date.now()){const sender=socialStore.profiles[inv.fromId];send(ws,{t:'socialPartyInvite',inviteId:inv.inviteId,partyId:inv.partyId,fromId:inv.fromId,fromName:sender?.name||'A friend',expiresAt:inv.expiresAt})}}return
   }
   const profile=socialStore.profiles[ws.socialProfileId];if(!profile||socialSockets.get(profile.id)!==ws)return;
   if(m.t==='socialRename'){
@@ -177,6 +177,7 @@ function handleSocialMessage(ws,m){
     send(recipient,{t:'socialPartyInvite',inviteId,partyId:party.id,fromId:profile.id,fromName:profile.name,expiresAt:Date.now()+90000});
     publishParty(party);send(ws,{t:'socialActionResult',ok:true,message:`Party invitation sent to ${target.name}.`});return
   }
+  if(m.t==='socialPartyInviteReceived'){const inv=pendingPartyInvites.get(String(m.inviteId||''));if(inv&&inv.toId===profile.id&&inv.expiresAt>Date.now()){const sender=socialSockets.get(inv.fromId);if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:`Party invitation delivered to ${profile.name}.`})}return}
   if(m.t==='socialPartyInviteResponse'){
     const inv=pendingPartyInvites.get(String(m.inviteId||''));if(!inv||inv.toId!==profile.id||inv.expiresAt<Date.now()){pendingPartyInvites.delete(String(m.inviteId||''));return send(ws,{t:'socialActionResult',ok:false,message:'This party invitation has expired.'})}
     pendingPartyInvites.delete(inv.inviteId);

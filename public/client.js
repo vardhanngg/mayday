@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v79.1-phase1-party-invite';
+const MAYDAY_BUILD='v79.2-party-delivery-ack';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -1176,7 +1176,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
   if(m.t==='socialState'){const previous=new Map((socialSnapshot.friends||[]).map(f=>[f.id,f.online]));socialProfile=m.profile||socialProfile;socialSnapshot={friends:m.friends||[],incomingRequests:m.incomingRequests||[],outgoingRequests:m.outgoingRequests||[]};paintAllSocialPanels();for(const f of socialSnapshot.friends){if(f.online&&!previous.get(f.id)&&previous.has(f.id))toast(`${f.name} is online`)}return}
   if(m.t==='socialActionResult'){if(m.message)toast(m.message);const root=document.getElementById('friendsSidebarPanel');socialFeedback(root,m.message);return}
   if(m.t==='socialPartyState'){socialParty=m.party||null;paintAllSocialPanels();const q=document.getElementById('quickMatch');if(q&&['ffa','clash','survivor'].includes(selectedMode))q.textContent=socialParty?(socialParty.leaderId===socialProfile?.id?'PLAY ONLINE WITH PARTY ('+socialParty.members.length+')':'WAIT FOR PARTY LEADER'):'PLAY ONLINE';if(socialParty)toast('Party ready: '+socialParty.members.map(x=>x.name).join(', '));return}
-  if(m.t==='socialPartyInvite'){showPartyInvitePrompt(m);return}
+  if(m.t==='socialPartyInvite'){sendSocial({t:'socialPartyInviteReceived',inviteId:m.inviteId});showPartyInvitePrompt(m);return}
   if(m.t==='socialPartyQueueRequest'){matchmakingMode=m.mode;errEl.textContent='';matchmakingActive=true;updateMatchmakingUi('connecting',{mode:m.mode});connect({t:'matchmake',mode:m.mode,partyId:m.partyId});return}
   if(m.t==='socialPartyQueueCancelRequest'){cancelMatchmaking(true);return}
   if(m.t==='socialInvite'){incomingSocialInvites.push(m);showNextSocialInvite();return}
@@ -1190,7 +1190,8 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
 function reportSocialStatus(status,code=roomCode){sendSocial({t:'socialStatus',status,roomCode:status==='lobby'?'':code});paintAllSocialPanels()}
 let activePartyInvite=null;
 function showPartyInvitePrompt(message){
- activePartyInvite={inviteId:String(message.inviteId||''),fromName:String(message.fromName||'A friend'),expiresAt:Number(message.expiresAt)||Date.now()+90000};
+ const incomingId=String(message.inviteId||'');if(!incomingId)return;if(activePartyInvite?.inviteId===incomingId)return;
+ activePartyInvite={inviteId:incomingId,fromName:String(message.fromName||'A friend'),expiresAt:Number(message.expiresAt)||Date.now()+90000};
  const dlg=document.getElementById('socialPartyInviteDialog'),label=document.getElementById('socialPartyInviteText');
  if(label)label.textContent=activePartyInvite.fromName+' invited you to join their online party. Accept to join their lobby squad.';
  if(dlg){dlg.style.display='flex';dlg.setAttribute('aria-hidden','false')}
