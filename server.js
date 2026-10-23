@@ -87,37 +87,35 @@ function publishParty(p){if(!p)return;const msg={t:'socialPartyState',party:part
 function removePartyMember(id){
   for(const p of socialParties.values()){
     if(!p.members.has(id))continue;
-    // A member leaving during search must not leave a stale queue seat behind.
-    for(const modeName of Object.keys(matchmakingQueues||{})){
-      for(const entry of [...(matchmakingQueues[modeName]||[])]){
-        if(entry.profileId===id&&entry.partyId===p.id)removeMatchmakingEntry(entry.ws,'cancelled','Party membership changed. Return to the lobby and start a new search.');
+    // A roster change invalidates an in-progress party search. Remove every
+    // queued seat for this party before mutating membership.
+    for(const modeName of Object.keys(matchmakingQueues)){
+      for(const entry of [...matchmakingQueues[modeName]]){
+        if(entry.partyId===p.id)removeMatchmakingEntry(entry.ws,'cancelled','Party membership changed. Everybody must return to the lobby and start a new search.');
       }
     }
-    p.members.delete(id);
-    for(const invite of pendingPartyInvites.values())if(invite.partyId===p.id&&(invite.fromId===id||invite.toId===id))pendingPartyInvites.delete(invite.inviteId);
-    if(p.members.size<2){
-      const remaining=[...p.members];
-      for(const left of remaining){const sw=socialSockets.get(left);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null})}
-      socialParties.delete(p.id);
-      return
-    }
-    if(p.leaderId===id)p.leaderId=p.members.values().next().value;
-    // A roster change invalidates the current queue attempt. Do not let the
-    // remaining members keep searching with a party size that no longer matches.
     if(p.mode){
-      for(const left of p.members){
-        for(const modeName of Object.keys(matchmakingQueues||{})){
-          for(const entry of [...(matchmakingQueues[modeName]||[])]){
-            if(entry.profileId===left&&entry.partyId===p.id)removeMatchmakingEntry(entry.ws,'cancelled','Your party changed during matchmaking. Start a new search.');
-          }
-        }
-        const sw=socialSockets.get(left);
+      for(const memberId of p.members){
+        const sw=socialSockets.get(memberId);
         if(sw&&sw.readyState===1)send(sw,{t:'socialPartyQueueCancelRequest'});
       }
       p.mode='';
     }
+    p.members.delete(id);
+    for(const invite of pendingPartyInvites.values()){
+      if(invite.partyId===p.id&&(invite.fromId===id||invite.toId===id))pendingPartyInvites.delete(invite.inviteId);
+    }
+    if(p.members.size<2){
+      for(const left of p.members){
+        const sw=socialSockets.get(left);
+        if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null});
+      }
+      socialParties.delete(p.id);
+      return;
+    }
+    if(p.leaderId===id)p.leaderId=p.members.values().next().value;
     publishParty(p);
-    return
+    return;
   }
 }
 
