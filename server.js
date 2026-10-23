@@ -250,6 +250,18 @@ function handleSocialMessage(ws,m){
     }
     if(inv.roomCode!==code){send(ws,{t:'err',m:'The invitation room does not match. Please accept a fresh invitation.',inviteId});return}
     try{
+      // If a refreshed browser already has a pilot entry in this room, reclaim that
+      // entry instead of adding a duplicate. Keep the original player ID/team/session.
+      const existing=Object.values(r.players).find(p=>p.profileId===profile.id);
+      if(existing){
+        const previous=existing.ws;
+        if(previous&&previous!==ws){previous._socialReplaced=true;previous.room=null;delete previous.id;delete previous.sessionToken;try{previous.close(4001,'pilot session moved to refreshed browser')}catch{}}
+        ws.id=existing.id;ws.room=r.code;ws.sessionToken=existing.sessionToken;ws.profileId=profile.id;existing.ws=ws;existing.connected=true;existing.disconnectedAt=0;clearTimeout(existing.reconnectTimer);existing.reconnectTimer=null;
+        send(ws,{t:'welcome',id:existing.id,code:r.code,roomId:r.code,mode:r.mode,session:existing.sessionToken,inviteId});
+        send(ws,info(r));rcast(r,info(r));broadcastGames();
+        console.log(`[invite ${BUILD_VERSION}] reclaimed existing pilot id=${inviteId.slice(0,8)} room=${r.code} profile=${profile.code}`);
+        pendingSocialInvites.delete(inviteId);return;
+      }
       // Use the already-open social socket for the room handoff. This avoids a second
       // WebSocket opening race that previously caused accepted invites to time out.
       detachSocketFromRoom(ws);
@@ -263,7 +275,7 @@ function handleSocialMessage(ws,m){
         const joinMsg={t:'join',roomId:r.code,code:r.code,n:profile.name,ty:m.ty,colorId:m.colorId,team:m.team,profileId:profile.id};
         const id=addPlayer(ws,r,joinMsg);
         send(ws,{t:'welcome',id,code:r.code,roomId:r.code,mode:r.mode,session:r.players[id].sessionToken,inviteId});
-        rcast(r,info(r));
+        send(ws,info(r));rcast(r,info(r));
       }
       console.log(`[invite ${BUILD_VERSION}] social-game-join id=${inviteId.slice(0,8)} room=${r.code} profile=${profile.code} socketReuse=true state=${r.state}`);
       broadcastGames();
@@ -477,12 +489,12 @@ function createQuickMatch(mode,batch){
   rooms[r.code]=r;
   const seated=[],partyTeams=new Map(),teamCounts=Object.fromEntries(activeTeams(r).map(t=>[t.id,0]));
   if(mode==='clash'){
-    const groups=[];for(const e of eligible){const key=e.partyId||'solo:'+e.profileId+':'+e.queuedAt;let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
+    const groups=[];for(const e of eligible){const key=e.partyId||e;let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
     for(const g of groups){const team=activeTeams(r).map(t=>t.id).sort((a,b)=>teamCounts[a]-teamCounts[b])[0];partyTeams.set(g.key,team);teamCounts[team]+=g.entries.length}
   }
   for(const entry of eligible){
     try{
-      const key=entry.partyId||'solo:'+entry.profileId+':'+entry.queuedAt,playerSpec=mode==='clash'?Object.assign({},entry.player,{team:partyTeams.get(key)}):entry.player;
+      const key=entry.partyId||entry,playerSpec=mode==='clash'?Object.assign({},entry.player,{team:partyTeams.get(key)}):entry.player;
       const id=addPlayer(entry.ws,r,playerSpec);
       if(!r.host)r.host=id;
       seated.push({entry,id});
