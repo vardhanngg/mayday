@@ -82,7 +82,7 @@ let socialStore={profiles:{}};
 try{const saved=JSON.parse(fs.readFileSync(SOCIAL_FILE,'utf8'));if(saved&&saved.profiles&&typeof saved.profiles==='object')socialStore=saved}catch{}
 const socialSockets=new Map(),pendingSocialInvites=new Map();
 const socialParties=new Map(),pendingPartyInvites=new Map();
-function partySnapshot(p){return {id:p.id,leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(x.id)&&socialSockets.get(x.id).readyState===1}))}}
+function partySnapshot(p){return {id:p.id,code:p.code||'',leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(id)&&socialSockets.get(id).readyState===1}))}}
 function publishParty(p){if(!p)return;const msg={t:'socialPartyState',party:partySnapshot(p)};for(const id of p.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,msg)}}
 function removePartyMember(id){for(const p of socialParties.values()){if(!p.members.has(id))continue;p.members.delete(id);if(p.members.size<2){for(const left of p.members){const sw=socialSockets.get(left);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null})}socialParties.delete(p.id);return}if(p.leaderId===id)p.leaderId=p.members.values().next().value;publishParty(p);return}}
 
@@ -183,7 +183,7 @@ function handleSocialMessage(ws,m){
     const recipient=socialSockets.get(target.id);if(!recipient||recipient.readyState!==1)return send(ws,{t:'socialActionResult',ok:false,message:`${target.name} is offline.`});
     let party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(party&&party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can invite friends.'});
-    if(!party){party={id:crypto.randomBytes(12).toString('hex'),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
+    if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
     if(party.members.has(target.id))return send(ws,{t:'socialActionResult',ok:false,message:`${target.name} is already in your party.`});
     if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'Parties can have up to 4 pilots.'});
     const inviteId=crypto.randomBytes(12).toString('hex');pendingPartyInvites.set(inviteId,{inviteId,partyId:party.id,fromId:profile.id,toId:target.id,expiresAt:Date.now()+90000});
@@ -211,6 +211,28 @@ function handleSocialMessage(ws,m){
     const sender=socialSockets.get(inv.fromId);
     if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:profile.name+' joined your party.'});
     return
+  }
+  if(m.t==='socialPartyCreateCode'){
+    let party=[...socialParties.values()].find(p=>p.members.has(profile.id));
+    if(party&&party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can generate the party code.'});
+    if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
+    if(!party.code)party.code=crypto.randomBytes(3).toString('hex').toUpperCase();
+    publishParty(party);send(ws,{t:'socialPartyCode',code:party.code});return
+  }
+  if(m.t==='socialPartyJoinCode'){
+    const code=String(m.code||'').trim().toUpperCase();
+    if(!/^[A-F0-9]{6}$/.test(code))return send(ws,{t:'socialActionResult',ok:false,message:'Enter the 6-character party code.'});
+    if(['playing','spectating','between','results','room'].includes(profile.status))return send(ws,{t:'socialActionResult',ok:false,message:'Leave your current game or room before joining a party.'});
+    const party=[...socialParties.values()].find(p=>String(p.code||'').toUpperCase()===code);
+    if(!party)return send(ws,{t:'socialActionResult',ok:false,message:'Party code not found. Ask the leader for a new code.'});
+    if(party.members.has(profile.id)){publishParty(party);return send(ws,{t:'socialActionResult',ok:true,message:'You are already in that party.'})}
+    if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'That party is full.'});
+    const previous=[...socialParties.values()].find(p=>p.members.has(profile.id));
+    if(previous&&previous.id!==party.id)removePartyMember(profile.id);
+    party.members.add(profile.id);publishParty(party);send(ws,{t:'socialPartyState',party:partySnapshot(party)});
+    send(ws,{t:'socialActionResult',ok:true,message:'Joined '+(socialStore.profiles[party.leaderId]?.name||'the party')+"'s party."});
+    const leader=socialSockets.get(party.leaderId);if(leader&&leader.readyState===1)send(leader,{t:'socialInviteResult',message:profile.name+' joined using party code.'});
+    console.info('[MAYDAY social] party code joined',JSON.stringify({partyId:party.id,profileId:profile.id,leaderId:party.leaderId,members:[...party.members]}));return
   }
   if(m.t==='socialPartyGet'){const party=[...socialParties.values()].find(p=>p.members.has(profile.id));send(ws,{t:'socialPartyState',party:party?partySnapshot(party):null});return}
   if(m.t==='socialPartyLeave'){removePartyMember(profile.id);send(ws,{t:'socialPartyState',party:null});return}
