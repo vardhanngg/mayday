@@ -1341,7 +1341,8 @@ function updateMatchmakingUi(state='idle',data={}){
   if(cancel)cancel.style.display='none';
 }
 function cancelMatchmaking(fromParty=false){
-  if(socialParty&&!fromParty)sendSocial({t:'socialPartyCancel'});
+  // Send cancellation even if the local party snapshot is stale during a social reconnect.
+  if(!fromParty&&(socialParty||matchmakingActive))sendSocial({t:'socialPartyCancel'});
   pendingRoomConnect=null;
   const socket=ws;
   if(socket&&socket!==socialSocket){
