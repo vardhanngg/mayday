@@ -4,11 +4,12 @@ MAYDAY is a browser-based 3D aircraft combat game with online Dogfight, Clash Sq
 
 ## Online matchmaking
 
-In Dogfight, Clash Squad, or Survivor, players can choose:
+In Dogfight, Clash Squad, or Survivor, players can form an online party directly from the main lobby:
 
-- **PLAY ONLINE** — enter automatic matchmaking. The queue prioritizes available players, starts a match after the normal wait, and may fill empty slots with computer-controlled pilots so a single player can still play.
-- **PLAY WITH FRIENDS** — create a private room, then invite online friends through the friends sidebar. Private rooms remain human-only.
-- **JOIN PRIVATE ROOM** — join an existing room with its four-character code.
+- **Party lobby** — the leader can invite up to three accepted online friends before selecting a mode. All clients receive the server-authoritative party roster.
+- **PLAY ONLINE** — the leader starts public matchmaking for the entire party. Dogfight and Survivor party members are opponents in the same match; Clash Squad keeps the party together on one team.
+- **ROOM** — create a private room or join one with its four-character code. Private rooms remain a separate path from public matchmaking.
+- **Practice** — solo training remains available; party practice is being introduced separately from public queues.
 
 Default matchmaking targets are 8 pilots for Dogfight, 8 for Clash Squad (balanced across two teams by default), and 6 for Survivor. Simulated pilots display just one first name from the supplied 5,000-name pool, with duplicate active names avoided where possible. Human pilots use their entered or saved profile name; a default “Pilot” placeholder does not overwrite a saved name. A subtle notice says matches may include computer-controlled pilots, while individual roster entries are not AI-labelled. Server-side simulation controls movement, firing, damage, kills, rounds, and scores. Queue backfill waits when another recent player is still searching so nearby arrivals can be grouped into the same match.
 
