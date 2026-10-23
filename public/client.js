@@ -1483,8 +1483,16 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
   for(const c of clouds){const u=c.userData;u.x+=u.drift*dt*10;const w=(v,p)=>p+(((v-p+R/2)%R)+R)%R-R/2;c.position.set(w(u.x,plane.position.x),u.y,w(u.z,plane.position.z));c.rotation.y+=dt*.003}
   const back=camMode===0?[0,12,46]:camMode===1?[0,4,-1]:[0,80,120];
   const mobileCameraQ=plane.quaternion.clone();if(mobileTouchEnabled&&inGame){const orbitQ=new T.Quaternion().setFromEuler(new T.Euler(mobileCameraPitch,mobileCameraYaw,0,'YXZ'));mobileCameraQ.multiply(orbitQ)}
-  if(!alive&&killCamActive&&performance.now()<killCamUntil&&remotes[killCamAttackerId]){
-   const kr=remotes[killCamAttackerId];camPos.set(58,28,86).applyQuaternion(kr.mesh.quaternion).add(kr.mesh.position);cam.position.lerp(camPos,Math.min(1,dt*4.5));look.copy(deathCamPos);cam.up.set(0,1,0);
+  if(!alive&&killCamActive&&performance.now()<killCamUntil&&remotes[killCamAttackerId]&&remotes[killCamAttackerId].mesh){
+   const kr=remotes[killCamAttackerId],attackerPos=kr.mesh.position,attackerQ=kr.mesh.quaternion;
+   // Keep the killer camera attached to the attacker and looking along the attacker's
+   // current flight direction, rather than staring at the victim's frozen death point.
+   camPos.set(0,10,48).applyQuaternion(attackerQ).add(attackerPos);cam.position.lerp(camPos,Math.min(1,dt*7));
+   const killerForward=new T.Vector3(0,0,-120).applyQuaternion(attackerQ);look.copy(attackerPos).add(killerForward);cam.up.set(0,1,0);
+  }else if(!alive&&killCamActive&&performance.now()<killCamUntil){
+   // The attacker may have disconnected or vanished from the local remote roster.
+   // Fall back to normal spectator tracking instead of leaving the death camera frozen.
+   killCamActive=false;killCamAttackerId=null;if(roomMode==='clash'||roomMode==='survivor'||spectatorMode)specFollow();
   }else if(!alive&&roomMode==='ffa'&&deathCamActive&&performance.now()<deathCamUntil){
    camPos.set(52,44,72).add(deathCamPos);cam.position.lerp(camPos,Math.min(1,dt*5));look.copy(deathCamLook);cam.up.set(0,1,0);
   }else if((keys.KeyX||mobileInput.rear)&&alive){
