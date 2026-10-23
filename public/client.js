@@ -1068,7 +1068,9 @@ function handleGameMessage(socket,first,rawData){if(ws!==socket)return;let m;try
   else if(m.t==='snap'){snapPlayers=m.players;score=m.score;roundNo=m.round;if(spectatorMode){alive=false;over=m.state==='between';if(roomMode==='clash'){const hidden=Math.max(...Object.values(snapPlayers).map(s=>s.rh||0),0);roundHiddenUntil=Math.max(roundHiddenUntil,performance.now()+hidden)} }else{const firstStealth=(m.players[myId]?.rh||0);if(roomMode==='clash'&&firstStealth)roundHiddenUntil=Math.max(roundHiddenUntil,performance.now()+firstStealth);const sp0=snapPlayers[myId];
    if(sp0){maxhp=sp0.mh||maxhp;protEnd=performance.now()+(sp0.pr||0);const nh=sp0.hp;shields=sp0.sh===undefined?shields:sp0.sh;shieldUntil=performance.now()+(sp0.su||0);if(nh<hp){const hitAmount=hp-nh;tone(180,.2,'sawtooth',.18,70);vibrateOnHit(hitAmount)}hp=nh;if(sp0.alive===false)alive=false;myColor=sp0.c||myColor}}
    for(const id in m.players){if(id==myId)continue;const s=m.players[id];let r=remotes[id];
-    if(!r){const remoteColor=roomMode==='clash'?(TC[s.team]||s.c||COLOR_BY_ID[s.colorId]?.color):(COLOR_BY_ID[s.colorId]?.color||s.c||TC[s.team]);r={mesh:makePlane(remoteColor,s.ty)};r.mesh.position.fromArray(s.p);remotes[id]=r}
+    const remoteColor=roomMode==='clash'?(TC[s.team]||s.c||COLOR_BY_ID[s.colorId]?.color):(COLOR_BY_ID[s.colorId]?.color||s.c||TC[s.team]);
+    if(!r){r={mesh:makePlane(remoteColor,s.ty),renderColor:remoteColor};r.mesh.position.fromArray(s.p);remotes[id]=r}
+    else if(r.renderColor!==remoteColor){const oldMesh=r.mesh;const pos=oldMesh.position.clone(),quat=oldMesh.quaternion.clone(),visible=oldMesh.visible;scene.remove(oldMesh);r.mesh=makePlane(remoteColor,s.ty);r.mesh.position.copy(pos);r.mesh.quaternion.copy(quat);r.mesh.visible=visible;r.renderColor=remoteColor; if(oldMesh.userData&&oldMesh.userData.shield)scene.remove(oldMesh.userData.shield)}
     const wasAlive=r.alive===true;r.p=s.p;r.q=s.q;r.hp=s.hp;r.mh=s.mh||100;r.alive=s.alive;r.ai=s.ai===true;r.team=s.team;r.colorId=s.colorId;r.lives=s.lives;r.sc=s.sc||0;r.protEnd=performance.now()+(s.pr||0);r.roundHiddenUntil=performance.now()+(s.rh||0);r.shieldUntil=performance.now()+(s.su||0);
     if(!wasAlive&&s.alive===true){r.mesh.position.fromArray(s.p);r.mesh.quaternion.fromArray(s.q);r.mesh.visible=true}}
    for(const id in remotes)if(!m.players[id]){scene.remove(remotes[id].mesh);delete remotes[id]}
@@ -1396,7 +1398,7 @@ function loop(){requestAnimationFrame(loop);if(!killReplayActive&&killReplayAvai
    plane.quaternion.setFromAxisAngle(new T.Vector3(0,1,0),landingStrip.heading);
   }
   fw.set(0,0,-1).applyQuaternion(plane.quaternion);
-  const boosting=(keys.ShiftLeft||keys.ShiftRight||mobileInput.boost)&&boost>3&&!keys.KeyS&&!mobileInput.brake;boost=boosting?Math.max(0,boost-dt*30):Math.min(100,boost+dt*10);
+  const boosting=!spectatorMode&&alive&&(keys.ShiftLeft||keys.ShiftRight||mobileInput.boost)&&boost>3&&!keys.KeyS&&!mobileInput.brake;boost=boosting?Math.max(0,boost-dt*30):Math.min(100,boost+dt*10);
   if(boosting&&!wasBoost)noise(.6,.2,2500);wasBoost=boosting;if(boosting){puff(tailPos(plane),0x66b0ff,2.5,.2,new T.Vector3(),.9,{add:true,grow:.5});puff(tailPos(plane),0xffa030,4.5,.35,new T.Vector3(),.8,{add:true,grow:1});shake=Math.max(shake,.06)}
   const speedResponse=realistic?(boosting?1.22:.48):(boosting?1.6:.8);speed+=((25+throttle*200*PTY.spd+(boosting?140:0))-speed)*dt*speedResponse-fw.y*dt*28-((keys.KeyS||mobileInput.brake)?dt*80:0);speed=Math.max(speed,0);
   cam.fov+=((boosting?80:65)-cam.fov)*Math.min(1,dt*4);cam.updateProjectionMatrix();
