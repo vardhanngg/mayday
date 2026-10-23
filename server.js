@@ -82,7 +82,7 @@ let socialStore={profiles:{}};
 try{const saved=JSON.parse(fs.readFileSync(SOCIAL_FILE,'utf8'));if(saved&&saved.profiles&&typeof saved.profiles==='object')socialStore=saved}catch{}
 const socialSockets=new Map(),pendingSocialInvites=new Map();
 const socialParties=new Map(),pendingPartyInvites=new Map();
-function partySnapshot(p){return {id:p.id,code:p.code||'',leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(id)&&socialSockets.get(id).readyState===1}))}}
+function partySnapshot(p){return {id:p.id,code:p.code||'',leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(x.id)&&socialSockets.get(x.id).readyState===1}))}}
 function publishParty(p){if(!p)return;const msg={t:'socialPartyState',party:partySnapshot(p)};for(const id of p.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,msg)}}
 function removePartyMember(id){for(const p of socialParties.values()){if(!p.members.has(id))continue;p.members.delete(id);if(p.members.size<2){for(const left of p.members){const sw=socialSockets.get(left);if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null})}socialParties.delete(p.id);return}if(p.leaderId===id)p.leaderId=p.members.values().next().value;publishParty(p);return}}
 
