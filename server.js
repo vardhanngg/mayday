@@ -184,7 +184,7 @@ function handleSocialMessage(ws,m){
     let party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(party&&party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can invite friends.'});
     if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
-    if(party.members.has(target.id))return send(ws,{t:'socialActionResult',ok:false,message:`${target.name} is already in your party.`});
+    if(party.members.has(target.id)){publishParty(party);const targetSocket=socialSockets.get(target.id);if(targetSocket&&targetSocket.readyState===1)send(targetSocket,{t:'socialPartyState',party:partySnapshot(party)});return send(ws,{t:'socialActionResult',ok:true,message:`${target.name} is already in your party. Squad roster refreshed.`})}
     if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'Parties can have up to 4 pilots.'});
     const inviteId=crypto.randomBytes(12).toString('hex');pendingPartyInvites.set(inviteId,{inviteId,partyId:party.id,fromId:profile.id,toId:target.id,expiresAt:Date.now()+90000});
     send(recipient,{t:'socialPartyInvite',inviteId,partyId:party.id,fromId:profile.id,fromName:profile.name,expiresAt:Date.now()+90000});
@@ -209,7 +209,7 @@ function handleSocialMessage(ws,m){
     send(ws,{t:'socialPartyState',party:partySnapshot(party)});
     send(ws,{t:'socialActionResult',ok:true,message:'Joined '+(socialStore.profiles[party.leaderId]?.name||'your friend')+"'s party."});
     const sender=socialSockets.get(inv.fromId);
-    if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:profile.name+' joined your party.'});
+    if(sender&&sender.readyState===1){send(sender,{t:'socialPartyState',party:partySnapshot(party)});send(sender,{t:'socialInviteResult',message:profile.name+' joined your party.'})}
     return
   }
   if(m.t==='socialPartyCreateCode'){
@@ -239,8 +239,16 @@ function handleSocialMessage(ws,m){
   if(m.t==='socialPartyCancel'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(!party)return;
-    for(const id of party.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1){send(sw,{t:'socialPartyQueueCancelRequest'});send(sw,{t:'socialPartyState',party:partySnapshot(party)})}}
-    return
+    // Cancel every server-side queue entry for the whole party before notifying clients.
+    // This avoids stale countdowns if a client misses the WebSocket cancellation message.
+    for(const id of party.members){
+      for(const modeName of Object.keys(matchmakingQueues)){
+        const entry=matchmakingQueues[modeName].find(e=>e.profileId===id&&e.partyId===party.id);
+        if(entry)removeMatchmakingEntry(entry.ws,'cancelled','Party matchmaking cancelled by the leader.');
+      }
+      const sw=socialSockets.get(id);if(sw&&sw.readyState===1){send(sw,{t:'socialPartyQueueCancelRequest'});send(sw,{t:'socialPartyState',party:partySnapshot(party)})}
+    }
+    party.mode='';publishParty(party);return
   }
   if(m.t==='socialPartyStart'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id)),mode=String(m.mode||'');
