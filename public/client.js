@@ -812,7 +812,7 @@ function showGameplayUi(){
   applyMobileHudLayout(true);
   updateLandscapeGate();
   const codeHud=document.getElementById('roomCodeHud');if(codeHud){codeHud.textContent=roomCode?`GAME CODE  ${roomCode}`:'';codeHud.style.display=roomCode?'block':'none'}
-  ['hud','score','cross','killConfirm','warn','banner','gameSettingsBtn','set'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='block'});const exitPracticeBtn=document.getElementById('exitPracticeBtn');if(exitPracticeBtn)exitPracticeBtn.style.display=practiceMode?'block':'none';
+  ['hud','score','cross','killConfirm','warn','banner','gameSettingsBtn','set','exitPracticeBtn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='block'});const exitPracticeBtn=document.getElementById('exitPracticeBtn');if(exitPracticeBtn){exitPracticeBtn.textContent='EXIT GAME';exitPracticeBtn.title='Leave this game and return to the main menu';}
   if(inGame&&mouseControls&&!spectatorMode&&!mobileTouchEnabled)setTimeout(requestMaydayPointerLock,60);
   const toast=document.getElementById('toast');if(toast)toast.style.display='block';
 }
