@@ -406,3 +406,45 @@ test('either party member cancelling sends cancellation to every connected party
     assert.equal(memberState.party.mode,'');
   });
 });
+
+
+test('a disconnected party member learns that matchmaking was cancelled after reconnecting', async t => {
+  await withServer(t, async (url, clients) => {
+    const party = await createParty(url, clients);
+    party.leader.send({t:'socialPartyStart', mode:'survivor'});
+    await Promise.all([
+      party.leader.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor'),
+      party.member.waitFor(m => m.t==='socialPartyQueueRequest' && m.mode==='survivor')
+    ]);
+
+    // Simulate the member's friends/social connection dropping while the search is active.
+    party.member.close();
+    const leaderGame = makeClient(url);
+    clients.push(leaderGame);
+    await leaderGame.opened;
+    leaderGame.send({
+      t:'matchmake', mode:'survivor', partyId:party.partyId, n:'Queue Leader', ty:'balanced',
+      profileId:party.leaderWelcome.profile.id, profileToken:party.leaderWelcome.profileToken
+    });
+    await leaderGame.waitFor(m => m.t==='matchmaking' && m.status==='searching' && m.mode==='survivor');
+
+    const cancelled = await leaderGame.waitFor(m =>
+      m.t==='matchmaking' && m.status==='cancelled' && m.mode==='survivor' &&
+      /timed out because not every member joined/i.test(m.message||''), 5000);
+    assert.match(cancelled.message, /not every member joined/i);
+
+    const reconnectedMember = makeClient(url);
+    clients.push(reconnectedMember);
+    await reconnectedMember.opened;
+    reconnectedMember.send({
+      t:'socialHello', name:'Queue Member',
+      profileId:party.memberWelcome.profile.id,
+      profileToken:party.memberWelcome.profileToken
+    });
+    await reconnectedMember.waitFor(m => m.t==='socialWelcome');
+    const restoredParty = await reconnectedMember.waitFor(m =>
+      m.t==='socialPartyState' && m.party?.id===party.partyId);
+    assert.equal(restoredParty.party.mode, '', 'reconnected member must see that the queue is no longer active');
+    assert.equal(restoredParty.party.queueState, 'cancelled', 'server must preserve the cancellation outcome for reconnecting clients');
+  }, 5000, 1000);
+});
