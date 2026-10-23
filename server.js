@@ -159,10 +159,23 @@ function handleSocialMessage(ws,m){
     profile.requestsOut=profile.requestsOut||[];target.requestsIn=target.requestsIn||[];profile.requestsOut.push(target.id);target.requestsIn.push(profile.id);saveSocial();refreshSocialNeighborhood(profile);send(ws,{t:'socialActionResult',ok:true,message:`Friend request sent to ${target.name}.`});return
   }
   if(m.t==='socialFriendResponse'){
-    const other=socialStore.profiles[String(m.profileId||'')];if(!other||(profile.requestsIn||[]).indexOf(other.id)<0)return send(ws,{t:'socialActionResult',ok:false,message:'That friend request is no longer available.'});
-    profile.requestsIn=profile.requestsIn.filter(id=>id!==other.id);other.requestsOut=(other.requestsOut||[]).filter(id=>id!==profile.id);
-    if(m.accept){profile.friends=profile.friends||[];other.friends=other.friends||[];if(!profile.friends.includes(other.id))profile.friends.push(other.id);if(!other.friends.includes(profile.id))other.friends.push(profile.id)}
-    saveSocial();refreshSocialNeighborhood(profile);sendSocialState(other);send(ws,{t:'socialActionResult',ok:true,message:m.accept?`You and ${other.name} are now friends.`:'Friend request declined.'});return
+    const other=socialStore.profiles[String(m.profileId||'')];
+    if(!other||(profile.requestsIn||[]).indexOf(other.id)<0)return send(ws,{t:'socialActionResult',ok:false,message:'That friend request is no longer available.'});
+    profile.requestsIn=(profile.requestsIn||[]).filter(id=>id!==other.id);
+    other.requestsOut=(other.requestsOut||[]).filter(id=>id!==profile.id);
+    if(m.accept){
+      profile.friends=profile.friends||[];other.friends=other.friends||[];
+      if(!profile.friends.includes(other.id))profile.friends.push(other.id);
+      if(!other.friends.includes(profile.id))other.friends.push(profile.id);
+    }
+    saveSocial();
+    // Publish the final state to both clients after all relationship arrays are updated.
+    sendSocialState(profile);sendSocialState(other);
+    refreshSocialNeighborhood(profile);refreshSocialNeighborhood(other);
+    send(ws,{t:'socialActionResult',ok:true,message:m.accept?'You and '+other.name+' are now friends.':'Friend request declined.'});
+    const otherSocket=socialSockets.get(other.id);
+    if(otherSocket&&otherSocket.readyState===1)send(otherSocket,{t:'socialActionResult',ok:true,message:m.accept?profile.name+' accepted your friend request.':profile.name+' declined your friend request.'});
+    return
   }
   if(m.t==='socialPartyInvite'){
     const target=socialStore.profiles[String(m.friendId||'')];
@@ -179,14 +192,23 @@ function handleSocialMessage(ws,m){
   }
   if(m.t==='socialPartyInviteReceived'){const inv=pendingPartyInvites.get(String(m.inviteId||''));if(inv&&inv.toId===profile.id&&inv.expiresAt>Date.now()){const sender=socialSockets.get(inv.fromId);if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:`Party invitation delivered to ${profile.name}.`})}return}
   if(m.t==='socialPartyInviteResponse'){
-    const inv=pendingPartyInvites.get(String(m.inviteId||''));if(!inv||inv.toId!==profile.id||inv.expiresAt<Date.now()){pendingPartyInvites.delete(String(m.inviteId||''));return send(ws,{t:'socialActionResult',ok:false,message:'This party invitation has expired.'})}
-    pendingPartyInvites.delete(inv.inviteId);
-    if(!m.accept){const sender=socialSockets.get(inv.fromId);if(sender)send(sender,{t:'socialInviteResult',message:`${profile.name} declined your party invitation.`});return}
+    const inviteId=String(m.inviteId||''),inv=pendingPartyInvites.get(inviteId);
+    if(!inv||inv.toId!==profile.id||inv.expiresAt<Date.now()){pendingPartyInvites.delete(inviteId);return send(ws,{t:'socialActionResult',ok:false,message:'This party invitation has expired. Ask your friend to invite you again.'})}
+    if(!m.accept){pendingPartyInvites.delete(inviteId);const sender=socialSockets.get(inv.fromId);if(sender)send(sender,{t:'socialInviteResult',message:profile.name+' declined your party invitation.'});return send(ws,{t:'socialActionResult',ok:true,message:'Party invitation declined.'})}
     if(['playing','spectating','between','results','room'].includes(profile.status))return send(ws,{t:'socialActionResult',ok:false,message:'Leave your current game or room before joining a party.'});
-    removePartyMember(profile.id);const party=socialParties.get(inv.partyId);
-    if(!party)return send(ws,{t:'socialActionResult',ok:false,message:'That party no longer exists.'});
-    if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'That party is full.'});
-    party.members.add(profile.id);publishParty(party);send(ws,{t:'socialActionResult',ok:true,message:`Joined ${socialStore.profiles[party.leaderId]?.name||'the'} party.`});return
+    const party=socialParties.get(inv.partyId);
+    if(!party){pendingPartyInvites.delete(inviteId);return send(ws,{t:'socialActionResult',ok:false,message:'The party no longer exists. Ask your friend to invite you again.'})}
+    if(party.members.has(profile.id)){pendingPartyInvites.delete(inviteId);publishParty(party);return send(ws,{t:'socialActionResult',ok:true,message:'You are already in this party.'})}
+    if(party.members.size>=4){pendingPartyInvites.delete(inviteId);return send(ws,{t:'socialActionResult',ok:false,message:'That party is full.'})}
+    const previousParty=[...socialParties.values()].find(p=>p.members.has(profile.id));
+    if(previousParty&&previousParty.id!==party.id)removePartyMember(profile.id);
+    pendingPartyInvites.delete(inviteId);
+    party.members.add(profile.id);
+    publishParty(party);
+    send(ws,{t:'socialActionResult',ok:true,message:'Joined '+(socialStore.profiles[party.leaderId]?.name||'your friend')+"'s party."});
+    const sender=socialSockets.get(inv.fromId);
+    if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:profile.name+' joined your party.'});
+    return
   }
   if(m.t==='socialPartyLeave'){removePartyMember(profile.id);send(ws,{t:'socialPartyState',party:null});return}
   if(m.t==='socialPartyCancel'){
