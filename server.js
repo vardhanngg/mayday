@@ -204,12 +204,15 @@ function handleSocialMessage(ws,m){
     if(previousParty&&previousParty.id!==party.id)removePartyMember(profile.id);
     pendingPartyInvites.delete(inviteId);
     party.members.add(profile.id);
+    console.info('[MAYDAY social] party invite accepted',JSON.stringify({inviteId,partyId:party.id,profileId:profile.id,leaderId:party.leaderId,members:[...party.members]}));
     publishParty(party);
+    send(ws,{t:'socialPartyState',party:partySnapshot(party)});
     send(ws,{t:'socialActionResult',ok:true,message:'Joined '+(socialStore.profiles[party.leaderId]?.name||'your friend')+"'s party."});
     const sender=socialSockets.get(inv.fromId);
     if(sender&&sender.readyState===1)send(sender,{t:'socialInviteResult',message:profile.name+' joined your party.'});
     return
   }
+  if(m.t==='socialPartyGet'){const party=[...socialParties.values()].find(p=>p.members.has(profile.id));send(ws,{t:'socialPartyState',party:party?partySnapshot(party):null});return}
   if(m.t==='socialPartyLeave'){removePartyMember(profile.id);send(ws,{t:'socialPartyState',party:null});return}
   if(m.t==='socialPartyCancel'){
     const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
