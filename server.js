@@ -448,7 +448,7 @@ function queueForMatchmaking(ws,m){
 function queueUnits(mode){
   const queue=matchmakingQueues[mode],units=[],seen=new Set();
   for(const e of queue){if(!e.partyId){units.push([e]);continue}if(seen.has(e.partyId))continue;seen.add(e.partyId);const p=socialParties.get(e.partyId);if(!p)continue;const group=queue.filter(x=>x.partyId===e.partyId&&x.mode===mode&&p.members.has(x.profileId));if(group.length===p.members.size&&p.members.size>=2)units.push(group.sort((a,b)=>[...p.members].indexOf(a.profileId)-[...p.members].indexOf(b.profileId)))}
-  return units.sort((a,b)=>Math.min(...a.map(e=>e.queuedAt))-Math.min(...b.map(e=>e.queuedAt))
+  return units.sort((a,b)=>Math.min(...a.map(e=>e.queuedAt))-Math.min(...b.map(e=>e.queuedAt)))
 }
 function selectMatchBatch(mode,target,partial=false){
   const chosen=[];let count=0;for(const unit of queueUnits(mode)){if(count+unit.length>target)continue;chosen.push(unit);count+=unit.length;if(count===target)break}
