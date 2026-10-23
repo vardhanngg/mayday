@@ -894,6 +894,10 @@ function leaveRoom(reason='menu',confirmHost=true){
   const doLeave=()=>{
     if(handled)return;handled=true;
     roomExitInProgress=true;intentionalDisconnect=true;clearRecoverySession();
+    // Clear stale matchmaking UI when leaving a live game or room. A deliberate
+    // Play Again action starts a new search after this teardown completes.
+    matchmakingActive=false;matchmakingElapsedSeconds=0;
+    updateMatchmakingUi('idle',{mode:matchmakingMode||selectedMode});
     const leavingSocket=ws;
     // Stop routing late gameplay packets before starting the teardown.
     ws=null;
