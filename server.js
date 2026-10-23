@@ -310,10 +310,10 @@ const isFFA=r=>r.mode==='ffa'||r.mode==='survivor';
 const colOf=(r,p)=>isFFA(r)?p.color:(TEAM_BY_ID[p.team]?.color||'#fff');
 const mvpScore=p=>(p.kills||0)*120+(p.damage||0)+(p.survivalBonus||0);
 const pickMVP=ps=>ps.slice().sort((a,b)=>mvpScore(b)-mvpScore(a)||(b.kills||0)-(a.kills||0)||(b.damage||0)-(a.damage||0))[0]||null;
-const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
+const info=r=>({t:'room',mode:r.mode,code:r.code,host:r.host,state:r.state,score:r.score,round:r.round,teamCount:r.teamCount||2,maxPlayers:r.maxPlayers||24,teams:activeTeams(r),lives:r.lives||1,colors:COLOR_DEFS,players:Object.entries(r.players).map(([id,p])=>({id:+id,n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,ty:p.ty,c:colOf(r,p),tn:isFFA(r)?'':(TEAM_BY_ID[p.team]?.name||p.team),lives:p.livesRemaining,online:p.connected!==false,gameUid:p.profileId&&socialStore.profiles[p.profileId]?socialStore.profiles[p.profileId].code:null}))});
 const pub=(r,p)=>({n:p.n,ai:p.ai===true,team:p.team,colorId:p.colorId,c:colOf(r,p),ty:p.ty,mh:p.mh,hp:p.hp,alive:p.connected!==false&&p.alive,sc:p.sc||0,lives:p.livesRemaining,online:p.connected!==false,pr:Math.max(0,p.prot-Date.now()),rh:r.mode==='clash'?Math.max(0,(r.roundHiddenUntil||0)-Date.now()):0,sh:r.mode==='clash'?(p.shields===undefined?3:p.shields):0,su:r.mode==='clash'?Math.max(0,(p.shieldUntil||0)-Date.now()):0,p:p.p,q:p.q});
 const mkCode=()=>{let c;do{c=Math.random().toString(36).replace(/[^a-z]/g,'').slice(0,4).toUpperCase()}while(c.length<4||rooms[c]);return c};
-function addPlayer(ws,r,m){const id=nextId++;ws.id=id;ws.room=r.code;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);const displayName=preferredPlayerName(m.n,identity);if(identity){ws.profileId=identity.id;if(identity.name!==displayName){identity.name=displayName;saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
+function addPlayer(ws,r,m){if(r.maxPlayers&&list(r).length>=r.maxPlayers)throw new Error('ROOM_FULL');const id=nextId++;ws.id=id;const identity=authProfile(m.profileId,m.profileToken)||(ws.socialProfileId?socialStore.profiles[ws.socialProfileId]:null);const displayName=preferredPlayerName(m.n,identity);if(identity){ws.profileId=identity.id;if(identity.name!==displayName){identity.name=displayName;saveSocial()}}const ty=HP[m.ty]?m.ty:'balanced';
   const cnt=t=>list(r).filter(p=>p.team===t).length;
   let team;
   if(isFFA(r)) team='p'+id;
@@ -463,7 +463,7 @@ function createQuickMatch(mode,batch){
     for(const modeName of Object.keys(matchmakingQueues))publishMatchmakingQueue(modeName,Date.now(),true);
     return;
   }
-  const r={code:mkCode(),mode,teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null,quickMatch:true,startedAt:Date.now(),aiBackfillUntil:Date.now()+90000};
+  const r={code:mkCode(),mode,teamCount:2,maxPlayers:cfg.target,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null,quickMatch:true,startedAt:Date.now(),aiBackfillUntil:Date.now()+90000};
   if(mode==='clash')for(const team of activeTeams(r))r.score[team.id]=0;
   rooms[r.code]=r;
   const seated=[],partyTeams=new Map(),teamCounts=Object.fromEntries(activeTeams(r).map(t=>[t.id,0]));
@@ -673,7 +673,7 @@ wss.on('connection',ws=>{
     if(ws.matchmakingEntry&&!['matchmake','matchmakeCancel'].includes(m.t))removeMatchmakingEntry(ws,'cancelled','Search cancelled.');
     let r=rooms[ws.room];
     if(m.t==='host'&&!r){
-      r={code:mkCode(),mode:['ffa','clash','survivor'].includes(m.mode)?m.mode:'ffa',teamCount:2,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null};
+      r={code:mkCode(),mode:['ffa','clash','survivor'].includes(m.mode)?m.mode:'ffa',teamCount:2,maxPlayers:24,lives:1,host:null,state:'lobby',score:{},round:0,players:{},spectators:new Set(),timer:null};
       
       if(r.mode==='clash') for(const t of activeTeams(r)) r.score[t.id]=0;rooms[r.code]=r;
       let id;try{id=addPlayer(ws,r,m)}catch(e){delete rooms[r.code];return send(ws,{t:'err',m:'Could not create the room.'})}
@@ -716,6 +716,11 @@ wss.on('connection',ws=>{
     }
     else     if(m.t==='setlives'&&id===r.host&&r.mode==='survivor'&&r.state==='lobby'){r.lives=Math.min(5,Math.max(1,Number(m.lives)||1));for(const p of list(r))p.livesRemaining=r.lives;rcast(r,info(r))}
     else if(m.t==='color'&&isFFA(r)&&(r.state==='lobby'||r.state==='between')){const c=COLOR_BY_ID[m.colorId];if(!c)return send(ws,{t:'err',m:'Unknown color.'});const taken=list(r).some(p=>p.id!==id&&p.colorId===c.id);if(taken)return send(ws,{t:'err',m:'That color is already taken.'});me.colorId=c.id;me.color=c.color;rcast(r,info(r))}
+    else if(m.t==='setmaxplayers'&&id===r.host&&!r.quickMatch&&(r.state==='lobby'||r.state==='between')){
+      const next=Math.min(24,Math.max(2,Number(m.maxPlayers)||24));
+      if(next<list(r).length)return send(ws,{t:'err',m:'Maximum players cannot be lower than the current room size.'});
+      r.maxPlayers=next;rcast(r,info(r))
+    }
     else if(m.t==='setteams'&&id===r.host&&r.mode==='clash'&&(r.state==='lobby'||r.state==='between')){
       const next=Math.min(6,Math.max(2,Number(m.teamCount)||2));
       if(next!==r.teamCount){
