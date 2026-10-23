@@ -482,7 +482,7 @@ function createQuickMatch(mode,batch){
   }
   for(const entry of eligible){
     try{
-      const key=entry.partyId||'solo:'+entry.profileId,playerSpec=mode==='clash'?Object.assign({},entry.player,{team:partyTeams.get(key)}):entry.player;
+      const key=entry.partyId||'solo:'+entry.profileId+':'+entry.queuedAt,playerSpec=mode==='clash'?Object.assign({},entry.player,{team:partyTeams.get(key)}):entry.player;
       const id=addPlayer(entry.ws,r,playerSpec);
       if(!r.host)r.host=id;
       seated.push({entry,id});
