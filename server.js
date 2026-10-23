@@ -477,7 +477,7 @@ function createQuickMatch(mode,batch){
   rooms[r.code]=r;
   const seated=[],partyTeams=new Map(),teamCounts=Object.fromEntries(activeTeams(r).map(t=>[t.id,0]));
   if(mode==='clash'){
-    const groups=[];for(const e of eligible){const key=e.partyId||'solo:'+e.queuedAt+':'+Math.random();let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
+    const groups=[];for(const e of eligible){const key=e.partyId||'solo:'+e.profileId+':'+e.queuedAt;let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
     for(const g of groups){const team=activeTeams(r).map(t=>t.id).sort((a,b)=>teamCounts[a]-teamCounts[b])[0];partyTeams.set(g.key,team);teamCounts[team]+=g.entries.length}
   }
   for(const entry of eligible){
