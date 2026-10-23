@@ -438,11 +438,11 @@ function queueForMatchmaking(ws,m){
   const mode=String(m.mode||''),cfg=MATCHMAKING[mode];if(!cfg)return send(ws,{t:'err',m:'Choose Dogfight, Clash Squad, or Survivor for online matchmaking.'});
   if(ws.room)return send(ws,{t:'err',m:'Leave your current room before searching for a match.'});
   if(ws.matchmakingEntry){if(ws.matchmakingEntry.mode===mode&&ws.matchmakingEntry.partyId===(m.partyId||'')){publishMatchmakingQueue(mode,Date.now(),true);return}removeMatchmakingEntry(ws,'cancelled','Previous search cancelled.')}
-  const identity=authProfile(m.profileId,m.profileToken);if(!identity)return send(ws,{t:'err',m:'Sign in to your MAYDAY profile before party matchmaking.'});
-  let partyId='';if(m.partyId){const party=socialParties.get(String(m.partyId));if(!party||!party.members.has(identity.id)||party.mode!==mode)return send(ws,{t:'err',m:'Your party is no longer ready. Return to the lobby and invite your friends again.'});partyId=party.id;if(party.members.size>cfg.target)return send(ws,{t:'err',m:'Your party is too large for this mode.'})}
-  for(const queuedMode of Object.keys(matchmakingQueues))for(const entry of [...matchmakingQueues[queuedMode]])if(entry.profileId===identity.id&&entry.ws!==ws)removeMatchmakingEntry(entry.ws,'replaced','Your MAYDAY profile started a new matchmaking search in another tab.');
+  const identity=authProfile(m.profileId,m.profileToken);
+  let partyId='';if(m.partyId){if(!identity)return send(ws,{t:'err',m:'Sign in to your MAYDAY profile before party matchmaking.'});const party=socialParties.get(String(m.partyId));if(!party||!party.members.has(identity.id)||party.mode!==mode)return send(ws,{t:'err',m:'Your party is no longer ready. Return to the lobby and invite your friends again.'});partyId=party.id;if(party.members.size>cfg.target)return send(ws,{t:'err',m:'Your party is too large for this mode.'})}
+  if(identity)for(const queuedMode of Object.keys(matchmakingQueues))for(const entry of [...matchmakingQueues[queuedMode]])if(entry.profileId===identity.id&&entry.ws!==ws)removeMatchmakingEntry(entry.ws,'replaced','Your MAYDAY profile started a new matchmaking search in another tab.');
   const queue=matchmakingQueues[mode];if(queue.length>=256)return send(ws,{t:'err',m:'This mode’s matchmaking queue is busy. Please try again shortly.'});
-  const entry={ws,mode,queuedAt:Date.now(),profileId:identity.id,partyId,player:{n:safeName(m.n),ty:HP[m.ty]?m.ty:'balanced',colorId:COLOR_BY_ID[m.colorId]?m.colorId:null,profileId:identity.id,profileToken:String(m.profileToken||'')}};
+  const profileId=identity?.id||'';const entry={ws,mode,queuedAt:Date.now(),profileId,partyId,player:{n:safeName(m.n),ty:HP[m.ty]?m.ty:'balanced',colorId:COLOR_BY_ID[m.colorId]?m.colorId:null,profileId:profileId||undefined,profileToken:identity?String(m.profileToken||''):undefined}};
   ws.matchmakingEntry=entry;queue.push(entry);publishMatchmakingQueue(mode,Date.now(),true);processMatchmakingQueues()
 }
 function queueUnits(mode){
@@ -477,7 +477,7 @@ function createQuickMatch(mode,batch){
   rooms[r.code]=r;
   const seated=[],partyTeams=new Map(),teamCounts=Object.fromEntries(activeTeams(r).map(t=>[t.id,0]));
   if(mode==='clash'){
-    const groups=[];for(const e of eligible){const key=e.partyId||'solo:'+e.profileId;let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
+    const groups=[];for(const e of eligible){const key=e.partyId||'solo:'+e.queuedAt+':'+Math.random();let g=groups.find(x=>x.key===key);if(!g){g={key,entries:[]};groups.push(g)}g.entries.push(e)}
     for(const g of groups){const team=activeTeams(r).map(t=>t.id).sort((a,b)=>teamCounts[a]-teamCounts[b])[0];partyTeams.set(g.key,team);teamCounts[team]+=g.entries.length}
   }
   for(const entry of eligible){
