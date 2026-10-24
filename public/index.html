@@ -351,7 +351,101 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
  #hud,#score,#radar,#roomCodeHud,#shieldHud{max-width:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 12px);}
  #mobileControls button,#mobileControls .mobileStick{user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
 }
-</style></head><body>
+</style><style id="hubStyles">
+/* ===== MAYDAY hub lobby (v80 redesign) ===== */
+#lobby{padding:0!important;display:block!important;overflow:hidden!important;height:100dvh!important;background:#050a14!important}
+#lobby.withFriendsSidebar{padding-right:0!important}
+#lobby>#menu{display:block;position:absolute!important;inset:0;width:auto!important;max-width:none!important;max-height:none!important;margin:0!important;overflow:hidden!important;text-align:left}
+#menu>#hub{height:100%!important;min-height:0!important;display:grid;grid-template-columns:clamp(120px,12vw,190px) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);background:radial-gradient(120% 90% at 70% 0%,#12223a 0%,#070d18 60%,#04070e 100%);font-family:inherit;color:#eaf2ff;align-items:stretch!important;justify-content:flex-start!important}
+#hub *{box-sizing:border-box}
+#hub button{font-family:inherit}
+#hubTop{grid-column:1/3;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px clamp(10px,1.6vw,22px);background:linear-gradient(180deg,rgba(4,8,16,.92),rgba(4,8,16,.35));z-index:3}
+.hubLogo{font:italic 1000 clamp(1.4rem,3.2vw,2.6rem)/1 "Arial Black",Impact,sans-serif;letter-spacing:.02em;display:flex;align-items:center;gap:8px;text-shadow:0 3px 14px rgba(0,0,0,.6)}
+.hubLogoJet{width:clamp(30px,4vw,56px);color:#dfe9f7;transform:rotate(-28deg)}
+.hubTag{font-size:.62rem;letter-spacing:.42em;color:#9fb3cf;margin-top:2px}.hubTag i{font-style:normal;color:#4aa3ff;margin:0 .3em}
+#hubTopRight{display:flex;align-items:center;gap:8px}
+#hubPilot{display:flex;align-items:center;gap:9px;padding:5px 12px 5px 6px;border:1px solid rgba(120,170,230,.28);border-radius:10px;background:rgba(10,20,36,.82);cursor:text;margin:0!important}
+#hubAvatar{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;font-weight:1000;background:linear-gradient(135deg,#2f8bff,#7a4bff);color:#fff}
+.hubPilotText{display:flex;flex-direction:column;line-height:1.1}.hubPilotText small{font-size:.55rem;letter-spacing:.14em;color:#7f93b2}
+#menu #hub input#name{width:min(30vw,150px)!important;margin:0!important;padding:2px 0!important;border:0!important;background:transparent!important;color:#fff!important;font-size:.95rem!important;font-weight:800;outline:none;text-align:left}
+.hubIconBtn{position:relative;margin:0!important;min-width:44px;height:44px;padding:0 12px!important;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid rgba(120,170,230,.28)!important;border-radius:10px!important;background:rgba(10,20,36,.82)!important;color:#fff!important;font-size:1.15rem!important;cursor:pointer;box-shadow:none!important}
+.hubIconBtn span{font-size:.62rem;letter-spacing:.1em;font-weight:800}.hubIconBtn b{font-size:.72rem;background:#1f9d6b;border-radius:999px;padding:1px 7px}
+.hubIconBtn:hover,.hubNavItem:hover{border-color:#4aa3ff!important;background:rgba(30,60,100,.7)!important}
+#hubNav{grid-row:2;display:flex;flex-direction:column;gap:2px;padding:8px 0;background:linear-gradient(90deg,rgba(6,12,24,.92),rgba(6,12,24,.4));z-index:2;min-height:0}
+.hubNavItem{display:flex;align-items:center;gap:12px;margin:0!important;padding:clamp(10px,2.2vh,18px) 16px!important;border:0!important;border-left:3px solid transparent!important;border-radius:0!important;background:transparent!important;color:#cfdcf1!important;font-size:1rem!important;text-align:left;cursor:pointer;box-shadow:none!important}
+.hubNavItem span{width:26px;text-align:center;font-size:1.25rem}.hubNavItem em{font-style:normal;font-weight:700}
+.hubNavItem.active{background:linear-gradient(90deg,rgba(47,139,255,.85),rgba(47,139,255,.1))!important;border-left-color:#8cc4ff!important;color:#fff!important}
+#buildVersionBadge{margin:auto 10px 6px!important;padding:3px 6px!important;font-size:.52rem!important;color:#6f819d!important;border:1px solid rgba(160,190,220,.14)!important;border-radius:999px;text-align:center;letter-spacing:.06em;word-break:break-all;line-height:1.2;display:block!important;background:none!important}
+#hubMain{grid-row:2;grid-column:2;display:flex;flex-direction:column;gap:clamp(6px,1.2vh,12px);padding:0 clamp(8px,1.4vw,20px) clamp(6px,1.2vh,14px);min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;position:relative}
+#hubHero{position:relative;flex:1 1 auto;min-height:clamp(70px,16vh,260px);border-radius:14px;overflow:hidden;border:1px solid rgba(120,170,230,.18);isolation:isolate}
+.heroSky{position:absolute;inset:0;background:linear-gradient(180deg,#0d1730 0%,#3a2a5c 38%,#c4577a 62%,#f39a52 78%,#2a2536 79%,#10121c 100%);z-index:-3}
+.heroGlow{position:absolute;left:62%;top:58%;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,#fff6d0 0%,#ffc36b 35%,rgba(255,150,70,0) 70%);transform:translate(-50%,-50%);z-index:-2}
+.heroRunway{position:absolute;left:0;right:0;bottom:0;height:21%;background:linear-gradient(180deg,rgba(255,170,100,.35),rgba(10,12,22,.95));z-index:-2}
+.heroJet{position:absolute;color:#10131d;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));z-index:-1}
+.heroJet.j1{width:min(34%,320px);left:6%;bottom:12%;transform:rotate(-6deg)}.heroJet.j2{width:min(14%,130px);left:50%;bottom:24%;opacity:.7}.heroJet.j3{width:min(18%,170px);right:6%;top:22%;transform:rotate(-14deg);opacity:.85;color:#1a1424}
+.heroText{position:absolute;left:clamp(12px,2vw,26px);top:clamp(8px,2vh,22px);right:50%;text-shadow:0 2px 12px rgba(0,0,0,.75)}
+.heroText h2{margin:0;font:italic 1000 clamp(1.1rem,2.6vw,2.2rem)/1.05 "Arial Black",Impact,sans-serif;letter-spacing:.02em}
+.heroText p{margin:4px 0 0;font-size:clamp(.7rem,1.3vw,.95rem);color:#ffe9d2}
+#hub #modeHelp{display:block;opacity:.85}#hub #err{color:#ffd36a;min-height:1.1em;font-weight:700}
+#recoveryPanel{position:absolute;right:12px;top:12px;max-width:300px;padding:9px 12px;border:1px solid rgba(125,224,255,.35);border-radius:12px;background:rgba(5,14,28,.85);font-size:.8rem}
+#recoveryPanel .recT{font-weight:1000;letter-spacing:.08em}#recoveryText{margin:3px 0 7px;opacity:.8}
+#modePicker{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,1.05fr);gap:clamp(6px,.9vw,12px);width:100%!important;max-width:none!important;margin:0!important;flex:0 0 auto}
+.hubCard{position:relative;display:flex;flex-direction:column;min-width:0;padding:10px 10px 10px;border-radius:12px;border:1.5px solid var(--c);background:linear-gradient(180deg,color-mix(in srgb,var(--c) 28%,#07101e) 0%,#08101d 70%);cursor:pointer;overflow:hidden;transition:transform .15s,box-shadow .15s;outline:none}
+.hubCard:hover,.hubCard:focus-visible{transform:translateY(-3px)}
+.hubCard.selected{box-shadow:0 0 0 2px var(--c),0 0 26px color-mix(in srgb,var(--c) 70%,transparent)}
+.hubCard header h3{margin:0;font:italic 1000 clamp(.85rem,1.35vw,1.25rem)/1.05 "Arial Black",Impact,sans-serif;letter-spacing:.01em}
+.hubCard header small{display:block;margin-top:2px;font-size:clamp(.5rem,.8vw,.65rem);letter-spacing:.12em;color:color-mix(in srgb,var(--c) 55%,#fff)}
+.cardJet{width:70%;align-self:center;margin:clamp(2px,1vh,10px) 0;color:#c9d6e8;opacity:.92;transform:rotate(-12deg);filter:drop-shadow(0 6px 8px rgba(0,0,0,.5));max-height:clamp(26px,9vh,90px)}
+.hubCard ul{list-style:none;margin:0 0 8px;padding:0;font-size:clamp(.58rem,.85vw,.74rem);color:#b9c8de;line-height:1.35;flex:1}.hubCard li{margin:1px 0}
+.hubCard select{background:#101827;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:2px 4px;font-size:.7rem;margin-left:6px}
+.hubPlay{margin:0!important;width:100%;padding:clamp(6px,1.2vh,11px)!important;border:1px solid color-mix(in srgb,var(--c) 70%,#fff)!important;border-radius:8px!important;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,#fff),var(--c))!important;color:#fff!important;font:italic 1000 clamp(.8rem,1.2vw,1.05rem)/1 "Arial Black",Impact,sans-serif!important;letter-spacing:.04em;cursor:pointer;box-shadow:none!important}
+.hubPlay:hover{filter:brightness(1.15)}
+.mDog{--c:#e0322f}.mClash{--c:#2f8bff}.mSurv{--c:#1f9d6b}.mPrac{--c:#8a5cff}.mChal{--c:#e0a31f}
+#hubRoom{display:flex;flex-direction:column;align-items:stretch;gap:7px;padding:10px;border-radius:12px;border:1px solid rgba(120,170,230,.25);background:rgba(8,14,26,.92);text-align:center;justify-content:center;min-width:0}
+#hubRoom h3{margin:0;font-size:clamp(.8rem,1.2vw,1rem);letter-spacing:.04em}#hubRoom small{font-size:.65rem;color:#8fa3c2;line-height:1.3}.roomLock{font-size:1.4rem;line-height:1}
+#menu #hubRoom button{margin:0!important;width:100%;min-width:0!important;padding:clamp(7px,1.3vh,12px)!important;border-radius:8px!important;font-weight:900!important;letter-spacing:.03em;font-size:clamp(.72rem,1vw,.9rem)!important;cursor:pointer}
+#hostMode{background:linear-gradient(180deg,#4aa3ff,#1f6fe0)!important;color:#fff!important;border:1px solid #8cc4ff!important}
+#joinMode{background:rgba(30,45,70,.85)!important;color:#dce8fa!important;border:1px solid rgba(120,170,230,.3)!important}
+#hubDock{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:clamp(6px,.9vw,12px);flex:0 0 auto}
+#hubDock>section{min-width:0;padding:10px 12px;border-radius:12px;border:1px solid rgba(120,170,230,.2);background:rgba(8,14,26,.92)}
+#hubDock h4{margin:0 0 6px;display:flex;align-items:center;gap:8px;font-size:.72rem;letter-spacing:.1em;color:#dbe7fa}
+#hubDock h4 b{font-size:.62rem;color:#8ee8a8}#hubDock h4 button{margin:0 0 0 auto!important;padding:0!important;border:0!important;background:none!important;color:#4aa3ff!important;font-size:.62rem!important;cursor:pointer;box-shadow:none!important}
+#hub #lobbySquad{width:auto!important;max-width:none!important;margin:0!important;background:rgba(8,14,26,.92)!important;box-shadow:none!important;border-radius:12px!important}
+#hub #lobbySquadHead{margin-bottom:6px;flex-wrap:wrap}#hub #lobbySquadHead strong{font-size:.72rem;letter-spacing:.1em}#hub #lobbySquadHead small{display:block;font-size:.62rem;color:#8fa3c2;margin-top:2px}
+#hub #lobbyPartyActions{display:flex;gap:5px;flex-wrap:wrap}
+#hub #lobbyPartyActions button{margin:0!important;padding:5px 8px!important;font-size:.6rem!important;border-radius:6px!important;min-width:0!important;cursor:pointer}
+#hub #lobbyPartyActions button[hidden]{display:none!important}
+#hub #lobbySquadSlots{gap:6px}#hub .lobbySquadSlot{min-height:clamp(38px,7vh,58px);padding:4px;gap:2px;border-radius:9px}#hub .lobbySquadSlot .slotIcon{font-size:1rem}#hub .lobbySquadSlot b{font-size:.68rem}#hub .lobbySquadSlot small{font-size:.55rem}
+#lobbyPartyCodeDisplay{margin:0 0 6px;font-size:.7rem;color:#82dcff}
+#hubAircraft .acRow{display:flex;align-items:center;gap:4px}#hubAircraft .acBody{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0;text-align:center}
+.acJet{width:60%;max-height:clamp(24px,7vh,60px);color:#c9d6e8;transform:rotate(-10deg)}#acName{font:italic 1000 clamp(.9rem,1.6vw,1.3rem) "Arial Black",Impact,sans-serif}#acStats{font-size:.62rem;color:#8fa3c2}
+#hubAircraft .acRow button{margin:0!important;width:30px;height:44px;padding:0!important;border:1px solid rgba(120,170,230,.25)!important;border-radius:8px!important;background:rgba(20,34,58,.9)!important;color:#fff!important;font-size:1.3rem!important;cursor:pointer;box-shadow:none!important}
+#menu #hub #ptype{width:100%;margin:6px 0 0!important;padding:5px 6px!important;font-size:.7rem!important;background:#101827;color:#fff;border:1px solid rgba(255,255,255,.2)!important;border-radius:8px!important}
+#hubAircraft.pulse{animation:acPulse 1s ease 2}@keyframes acPulse{50%{box-shadow:0 0 0 3px #4aa3ff,0 0 26px #4aa3ff}}
+#hubFriendsList{display:flex;flex-direction:column;gap:5px;max-height:clamp(70px,16vh,150px);overflow-y:auto}
+.hubFriend{display:flex;align-items:center;gap:8px;font-size:.74rem;min-width:0}.hubFriend .socialDot{flex:none}.hubFriend>div{flex:1;min-width:0}.hubFriend b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hubFriend small{display:block;font-size:.6rem;color:#8fa3c2}
+.hubFriend button{margin:0!important;padding:5px 10px!important;font-size:.62rem!important;border-radius:6px!important;min-width:64px;cursor:pointer;background:rgba(30,45,70,.9)!important;color:#dce8fa!important;border:1px solid rgba(120,170,230,.3)!important;box-shadow:none!important}
+.hubFriend .tag{font-size:.58rem;padding:3px 7px;border-radius:6px;background:rgba(31,157,107,.25);color:#8ee8a8}.hubEmpty{font-size:.72rem;color:#8fa3c2}
+#menu #matchmakingPanel{position:fixed!important;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;width:min(86vw,360px)!important;margin:0!important;padding:22px 26px!important;border:1px solid rgba(125,224,255,.45)!important;border-radius:16px!important;background:rgba(5,14,30,.96)!important;box-shadow:0 0 0 100vmax rgba(0,0,0,.6),0 24px 60px rgba(0,0,0,.6);text-align:center;font-size:1.05rem!important;font-weight:900}
+#menu #matchmakingPanel .navBtn{margin-top:14px!important}
+#menu #joinBox{position:fixed!important;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;width:min(90vw,420px);margin:0!important;padding:20px 22px;border:1px solid rgba(125,224,255,.4);border-radius:16px;background:rgba(5,14,30,.97);box-shadow:0 0 0 100vmax rgba(0,0,0,.6),0 24px 60px rgba(0,0,0,.6);text-align:center}
+#joinBox .joinTitle{font-weight:900;letter-spacing:.08em;margin-bottom:10px}#joinBox #code{width:140px;letter-spacing:.15em;text-transform:uppercase;text-align:center}#joinBox small{display:block;margin-top:10px;opacity:.75;font-size:.72rem}
+#settingsBox{max-height:86dvh;overflow-y:auto}#controlsHelp p{font-size:.78rem;line-height:1.5;opacity:.88;text-align:left}#controlsHelp summary{cursor:pointer}
+#lobby:has(#menu:not([style*="display: none"]))~#friendsToggle{display:none!important}
+@media (max-width:1100px){#modePicker{grid-template-columns:repeat(5,minmax(150px,1fr)) minmax(150px,1fr);overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px}.hubCard,#hubRoom{scroll-snap-align:start}}
+@media (max-width:820px),(max-height:560px){
+ #hub{grid-template-columns:54px minmax(0,1fr)!important}.hubNavItem{padding:10px 0!important;justify-content:center}.hubNavItem em,#buildVersionBadge,.hubTag,.hubPilotText small,.hubIconBtn span{display:none!important}
+ #hubHero{min-height:0;flex:0 0 clamp(0px,14vh,90px)}.heroText h2{font-size:1rem}#hubPartyLine,#hub #modeHelp{display:none}
+ #hubDock{grid-template-columns:1.2fr 1fr 1fr}.cardJet{display:none}.hubCard ul li:nth-child(2){display:none}
+}
+@media (max-height:420px){#hubHero{display:none}#hubTop{padding:4px 10px}.hubLogo{font-size:1.2rem}.hubIconBtn{height:36px}#hubAvatar{width:28px;height:28px}}
+#hub #practiceSettings{display:block!important;margin:2px 0 0!important;padding:0!important;border:0!important;background:none!important}#hub #practiceSettings label{font-weight:700!important;margin:0!important;font-size:.7rem}
+body:has(#lobby:not([style*="none"]) #menu:not([style*="none"])) #mobileSettingsBtn{left:min(34vw,300px)!important;right:auto!important;top:12px!important}
+@media (max-width:820px),(max-height:560px){#modePicker{align-items:start}#hub #lobbyPartyActions{flex-wrap:nowrap}#hub #lobbySquadHead{flex-wrap:nowrap;gap:6px}#hub #lobbySquadHead small{display:none}#hub #lobbyPartyActions button{padding:5px 6px!important;font-size:.55rem!important;white-space:nowrap}#hub #lobbySquadSlots{grid-template-columns:repeat(4,minmax(0,1fr))}#hub .lobbySquadSlot b{font-size:.6rem}#hubDock{grid-template-columns:1.5fr 1fr 1fr}}
+#menu #matchmakingPanel.mmResult{top:74px;transform:translateX(-50%);padding:10px 20px!important;font-size:.85rem!important;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none}
+#menu #matchmakingPanel.mmResult #cancelMatchmaking{display:none!important}
+</style>
+</head><body>
 <canvas id="radar" width="240" height="240"></canvas><div id="roomCodeHud"></div><div id="missileWarning"></div><div id="shieldHud"></div><div id="spectatorHud"></div><div id="hud"></div><div id="landingHint"></div><div id="score"></div><div id="toast"></div><div id="quickAlert" role="status" aria-live="assertive"></div><div id="cross"></div><button id="killReplayBtn" type="button" aria-label="Play kill replay from the killer’s point of view when available">↻ KILL REPLAY (P)</button><div id="killConfirm"><span class="killIcon">☠</span><span class="killWord">KILL</span><span class="killTarget"></span></div><div id="lock"></div><div id="warn"></div><div id="win"></div><div id="banner"></div>
 <button id="gameSettingsBtn" class="navBtn">⚙ SETTINGS</button>
 <button id="exitPracticeBtn" class="navBtn" type="button" aria-label="Exit Practice mode and return to main menu">✕ EXIT</button>
@@ -411,42 +505,57 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
   </div>
 </div>
 <div id="set"><b>Sensitivity</b> (O = hide/show)<br>Up/Down <input id="sp" type="range" min=".3" max="3" step=".1" value="1"><br>Tilt A/D <input id="sr" type="range" min=".3" max="3" step=".1" value="1"><br>Turn &larr;/&rarr; <input id="sy" type="range" min=".3" max="3" step=".1" value="1"></div>
-<div id="vignette"></div><div id="lobby"><h1>✈ MAYDAY</h1><div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting" style="display:inline-block;margin:-8px auto 12px;padding:4px 8px;border:1px solid rgba(160,190,220,.25);border-radius:999px;background:rgba(10,20,35,.38);color:#b9c8d8;font-size:10px;font-weight:800;letter-spacing:.08em">BUILD v79.0-bot-combat-fix</div>
-<div id="menu"><div style="display:flex;justify-content:flex-end;max-width:920px;margin:0 auto 2px"><button id="openSettings" class="navBtn" style="margin-top:0;min-width:120px">⚙ SETTINGS</button></div>
-<div><input id="name" type="text" placeholder="Your name" maxlength="14"> <label>Plane <select id="ptype" style="padding:8px;font-size:1rem;border-radius:8px;border:0"><option value="fighter">Fighter · 75 HP · fast & agile</option><option value="balanced" selected>Balanced · 100 HP · all-round</option><option value="heavy">Heavy · 150 HP · tough, slow turns</option><option value="interceptor">Interceptor · 90 HP · very fast · sharp turns</option><option value="striker">Strike Fighter · 175 HP · heavy assault · broad wings</option></select></label> <span id="colorIntro" style="opacity:.75">Pilot color and aircraft can be changed inside the room.</span></div>
-<label style="display:block;margin:10px;font-size:1.05rem"><input type="checkbox" id="inv" style="width:18px;height:18px;vertical-align:middle"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label>
-<p><b>PC:</b> W accelerate · S brake · ↑/↓ pitch · A/D tilt · ←/→ turn · SPACE shoot · F missile · R flares · SHIFT boost. <b>Phones:</b> use the on-screen flight stick and action buttons; drag the open sky to look around. Use HUD SETTINGS to resize, fade, hide, or save layouts; ⚙ MOBILE adjusts sensitivity, handling, graphics, FPS, auto-level and vibration.</p>
-<p><b>Hold enemy in sights 3s = LOCK</b> · <b>Lock limit 4.2 km</b> · clouds can break lock · <b>O</b> hide/show sensitivity + settings · <b>C</b> camera · <b>Hold X</b> rear view · <b>I</b> invert pitch · <b>Tab</b> spectate · <b>Hold G for 1 second</b> to send a room-wide “MAYDAY” alert (Clash Squad) · <b>P</b> replay your last death when available · <b>Q</b> shield (Clash Squad, 7s) · <b>R</b> countermeasures · <b>SETTINGS</b> = optional mouse controls</p><p>🌲 Forests · ✈ 2 neutral air-landing runways with green edge lights · 🧭 Rotating map by default · <b>M</b> toggles North-up · 💥 crash fire & smoke</p>
-<section id="lobbySquad" aria-label="Online party">
-<div id="lobbySquadHead"><span><strong>YOUR SQUAD</strong><br><small id="lobbySquadStatus">Invite up to 3 friends before choosing a mode</small></span><div id="lobbyPartyActions"><button id="lobbyPartyInviteBtn" type="button" class="secondaryBtn">＋ INVITE FRIENDS</button><button id="lobbyPartyGenerateCode" type="button" class="secondaryBtn">GENERATE PARTY CODE</button><button id="lobbyPartyEnterCode" type="button" class="secondaryBtn">ENTER PARTY CODE</button></div></div><div id="lobbyPartyCodeDisplay" hidden></div>
-<div id="lobbySquadSlots">
-<div class="lobbySquadSlot filled"><span class="slotIcon">✈</span><b id="lobbySquadSlot0Name">YOU</b><small id="lobbySquadSlot0Role">PARTY LEADER</small></div>
-<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot1Name">OPEN SLOT</b><small id="lobbySquadSlot1Role">INVITE FRIEND</small></div>
-<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot2Name">OPEN SLOT</b><small id="lobbySquadSlot2Role">INVITE FRIEND</small></div>
-<div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot3Name">OPEN SLOT</b><small id="lobbySquadSlot3Role">INVITE FRIEND</small></div>
-</div></section>
-<div id="modePicker">
-<div style="font-weight:1000;font-size:1.12rem;letter-spacing:.08em;margin-bottom:8px">SELECT MODE</div>
-<div class="modeGrid">
-<button class="modeCard" data-mode="ffa"><div class="modeNo">01</div><div class="modeName">DOGFIGHT</div><div class="modeMeta">Every pilot for themselves.</div><div class="modeArt">✈</div></button>
-<button class="modeCard" data-mode="clash"><div class="modeNo">02</div><div class="modeName">CLASH SQUAD</div><div class="modeMeta">Team elimination combat.<br>2–6 teams · 3 shields per round · last team alive wins.</div><div class="modeArt">⚔</div></button>
-<button class="modeCard" data-mode="survivor"><div class="modeNo">03</div><div class="modeName">SURVIVOR</div><div class="modeMeta">Everyone against everyone.<br>1–5 lives · last pilot remaining wins.</div><div class="modeArt">☠</div></button>
-<button class="modeCard" data-mode="practice"><div class="modeNo">04</div><div class="modeName">PRACTICE</div><div class="modeMeta">Solo training arena.<br>Engage moving targets · no room code.</div><div class="modeArt">◎</div></button>
-<button class="modeCard" data-mode="challenge"><div class="modeNo">05</div><div class="modeName">FLIGHT CHALLENGE</div><div class="modeMeta">Precision flying course.<br>Pass arches, collect flags, destroy targets with unguided missiles.</div><div class="modeArt">🏁</div></button>
-</div>
-<div id="selectedModePanel"><div id="selectedModeTitle"></div><div id="selectedModeMeta"></div><div id="practiceSettings"><label for="practiceDifficulty">OPPONENT DIFFICULTY</label><select id="practiceDifficulty"><option value="easy">EASY</option><option value="normal" selected>NORMAL</option><option value="hard">HARD</option></select><div style="margin-top:6px;font-size:.82rem;opacity:.72">Higher difficulty means sharper aim, quicker reactions and more frequent attacks.</div></div></div>
-<div id="actionRow"><button id="quickMatch" class="actionBtn" style="display:none">PLAY ONLINE</button><button id="hostMode" class="actionBtn">PLAY WITH FRIENDS</button><button id="joinMode" class="actionBtn secondaryBtn">JOIN PRIVATE ROOM</button><button id="practiceMode" class="actionBtn" style="display:none">ENTER PRACTICE</button><button id="challengeMode" class="actionBtn" style="display:none">START FLIGHT CHALLENGE</button><button id="backToModes" class="navBtn">← BACK TO MODES</button></div>
-<div id="matchmakingPanel" role="status" aria-live="polite" style="display:none;width:min(100%,320px);box-sizing:border-box;margin:10px auto 0;padding:10px 14px;border:1px solid rgba(125,224,255,.3);border-radius:12px;background:rgba(5,18,34,.76);color:#e7f4ff;font-size:1rem;font-weight:800;text-align:center"><div id="matchmakingStatus">MATCHMAKING · 00:00</div><button id="cancelMatchmaking" class="navBtn" style="display:none;margin-top:9px">CANCEL SEARCH</button></div>
-<div id="recoveryPanel" style="display:none;margin:10px auto 0;max-width:920px;padding:12px 14px;border:1px solid rgba(125,224,255,.25);border-radius:12px;background:rgba(10,30,45,.55)"><div style="font-weight:1000;letter-spacing:.08em">↩ CONTINUE LAST GAME</div><div id="recoveryText" style="margin:4px 0 9px;opacity:.78;font-size:.88rem"></div><button id="resumeLastGame" class="actionBtn">CONTINUE</button> <button id="forgetLastGame" class="navBtn">DISCARD</button></div>
-<div id="joinBox" style="display:none;margin-top:10px">
-<div style="margin-bottom:6px;font-weight:900;letter-spacing:.06em">JOIN A ROOM</div>
-<input id="code" type="text" placeholder="GAME CODE" maxlength="4" autocomplete="off" style="text-transform:uppercase;width:140px;letter-spacing:.15em"> 
-<button id="join">JOIN / WATCH</button><br><small style="opacity:.75">Enter the 4-character Game Code. Waiting room = join as a pilot · live match = join as a spectator. In spectator mode, <b>TAB</b> = next pilot · <b>SHIFT+TAB</b> = previous pilot.</small><div id="navRow"><button id="backFromJoin" class="navBtn">← BACK</button></div>
-</div>
-</div>
-<p id="modeHelp" style="max-width:620px;margin:8px auto;font-size:.9rem;opacity:.86">Choose your mode and take to the skies.</p>
-<p id="err" style="color:#ffd36a;min-height:1.2em"></p>
-</div>
+<div id="vignette"></div><div id="lobby"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="jetShape" viewBox="0 0 240 90"><path d="M4 46 L70 40 L90 31 L95 11 L108 11 L113 31 L150 28 L204 40 L236 44 L204 50 L150 58 L113 61 L108 79 L95 79 L90 59 L70 52 Z" fill="currentColor"/><ellipse cx="176" cy="45" rx="20" ry="3.4" fill="rgba(255,255,255,.35)"/></symbol></defs></svg>
+<div id="menu"><div id="hub">
+<header id="hubTop">
+ <div id="hubBrand"><div class="hubLogo">MAYDAY<svg class="hubLogoJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg></div><div class="hubTag">FLY <i>·</i> FIGHT <i>·</i> SURVIVE</div></div>
+ <div id="hubTopRight">
+  <label id="hubPilot" for="name"><span id="hubAvatar">P</span><span class="hubPilotText"><small>PILOT CALLSIGN</small><input id="name" type="text" placeholder="Your name" maxlength="14" autocomplete="off"></span></label>
+  <button id="hubFriendsBtn" class="hubIconBtn" type="button" aria-label="Friends">👥<b id="hubFriendsCount">0</b></button>
+  <button id="openSettings" class="hubIconBtn" type="button" aria-label="Settings">⚙<span>SETTINGS</span></button>
+ </div>
+</header>
+<nav id="hubNav" aria-label="Main">
+ <button type="button" class="hubNavItem active" data-nav="play"><span>✈</span><em>Play</em></button>
+ <button type="button" class="hubNavItem" data-nav="hangar"><span>🛩</span><em>Hangar</em></button>
+ <button type="button" class="hubNavItem" data-nav="friends"><span>👥</span><em>Friends</em></button>
+ <button type="button" class="hubNavItem" data-nav="settings"><span>⚙</span><em>Settings</em></button>
+ <div id="buildVersionBadge" title="Build identifier for multiplayer troubleshooting">BUILD v80.0</div>
+</nav>
+<main id="hubMain">
+ <section id="hubHero">
+  <div class="heroSky"></div><div class="heroGlow"></div>
+  <svg class="heroJet j1" viewBox="0 0 240 90"><use href="#jetShape"/></svg><svg class="heroJet j2" viewBox="0 0 240 90"><use href="#jetShape"/></svg><svg class="heroJet j3" viewBox="0 0 240 90"><use href="#jetShape"/></svg>
+  <div class="heroRunway"></div>
+  <div class="heroText"><h2 id="hubHeadline">READY FOR TAKEOFF</h2><p id="hubPartyLine">Flying solo. Invite friends to form a squad.</p><p id="modeHelp">Choose a mode and take to the skies.</p><p id="err"></p></div>
+  <div id="recoveryPanel" style="display:none"><div class="recT">↩ CONTINUE LAST GAME</div><div id="recoveryText"></div><div class="recBtns"><button id="resumeLastGame" class="actionBtn">CONTINUE</button> <button id="forgetLastGame" class="navBtn">DISCARD</button></div></div>
+ </section>
+ <section id="modePicker" aria-label="Game modes">
+  <article class="hubCard mDog" data-mode="ffa" tabindex="0"><header><h3>DOGFIGHT</h3><small>FREE FOR ALL</small></header><svg class="cardJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><ul><li>👥 8–12 pilots</li><li>Party members fight as opponents</li></ul><button type="button" class="hubPlay" data-play="ffa">PLAY</button></article>
+  <article class="hubCard mClash selected" data-mode="clash" tabindex="0"><header><h3>CLASH SQUAD</h3><small>TEAM BATTLE</small></header><svg class="cardJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><ul><li>⚔ 2 squads · Team vs Team</li><li>Your party always stays together</li></ul><button type="button" class="hubPlay" data-play="clash">PLAY</button></article>
+  <article class="hubCard mSurv" data-mode="survivor" tabindex="0"><header><h3>SURVIVOR</h3><small>LAST PILOT STANDING</small></header><svg class="cardJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><ul><li>☠ 8–16 pilots</li><li>Same match · every pilot for themselves</li></ul><button type="button" class="hubPlay" data-play="survivor">PLAY</button></article>
+  <article class="hubCard mPrac" data-mode="practice" tabindex="0"><header><h3>PRACTICE</h3><small>TRAINING</small></header><svg class="cardJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><ul><li>◎ Moving targets · no pressure</li><li id="practiceSettings"><label for="practiceDifficulty">Difficulty</label><select id="practiceDifficulty"><option value="easy">EASY</option><option value="normal" selected>NORMAL</option><option value="hard">HARD</option></select></li></ul><button type="button" class="hubPlay" data-play="practice">PLAY</button></article>
+  <article class="hubCard mChal" data-mode="challenge" tabindex="0"><header><h3>FLIGHT CHALLENGE</h3><small>PRECISION COURSE</small></header><svg class="cardJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><ul><li>🏁 Arches, flags &amp; targets</li><li>Unguided missiles</li></ul><button type="button" class="hubPlay" data-play="challenge">PLAY</button></article>
+  <aside id="hubRoom"><div class="roomLock">🔒</div><h3>PRIVATE ROOM</h3><small id="hubRoomMode">Play with your friends · CLASH SQUAD</small><button id="hostMode" class="actionBtn" type="button">CREATE ROOM</button><button id="joinMode" class="actionBtn secondaryBtn" type="button">JOIN ROOM</button></aside>
+ </section>
+ <section id="hubDock">
+  <section id="lobbySquad" aria-label="Online party">
+   <div id="lobbySquadHead"><span><strong>YOUR SQUAD</strong><small id="lobbySquadStatus">Invite up to 3 friends before choosing a mode</small></span><div id="lobbyPartyActions"><button id="lobbyPartyInviteBtn" type="button" class="secondaryBtn">＋ INVITE</button><button id="lobbyPartyGenerateCode" type="button" class="secondaryBtn">CODE</button><button id="lobbyPartyEnterCode" type="button" class="secondaryBtn">ENTER CODE</button><button id="lobbyPartyLeaveBtn" type="button" class="secondaryBtn" hidden>LEAVE</button></div></div><div id="lobbyPartyCodeDisplay" hidden></div>
+   <div id="lobbySquadSlots">
+    <div class="lobbySquadSlot filled"><span class="slotIcon">✈</span><b id="lobbySquadSlot0Name">YOU</b><small id="lobbySquadSlot0Role">PARTY LEADER</small></div>
+    <div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot1Name">OPEN SLOT</b><small id="lobbySquadSlot1Role">INVITE FRIEND</small></div>
+    <div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot2Name">OPEN SLOT</b><small id="lobbySquadSlot2Role">INVITE FRIEND</small></div>
+    <div class="lobbySquadSlot"><span class="slotIcon">＋</span><b id="lobbySquadSlot3Name">OPEN SLOT</b><small id="lobbySquadSlot3Role">INVITE FRIEND</small></div>
+   </div>
+  </section>
+  <section id="hubAircraft"><h4>CURRENT AIRCRAFT</h4><div class="acRow"><button type="button" id="acPrev" aria-label="Previous aircraft">‹</button><div class="acBody"><svg class="acJet" viewBox="0 0 240 90"><use href="#jetShape"/></svg><b id="acName">BALANCED</b><small id="acStats"></small></div><button type="button" id="acNext" aria-label="Next aircraft">›</button></div><select id="ptype"><option value="fighter">Fighter · 75 HP · fast &amp; agile</option><option value="balanced" selected>Balanced · 100 HP · all-round</option><option value="heavy">Heavy · 150 HP · tough, slow turns</option><option value="interceptor">Interceptor · 90 HP · very fast · sharp turns</option><option value="striker">Strike Fighter · 175 HP · heavy assault · broad wings</option></select><span id="colorIntro" hidden>Pilot color and aircraft can be changed inside the room.</span></section>
+  <section id="hubFriends"><h4>FRIENDS ONLINE <b id="hubFriendsOnline">0</b><button type="button" id="hubFriendsAll">SEE ALL ›</button></h4><div id="hubFriendsList"><div class="hubEmpty">Sign in to see your friends.</div></div></section>
+ </section>
+ <div id="matchmakingPanel" role="status" aria-live="polite" style="display:none"><div id="matchmakingStatus">MATCHMAKING · 00:00</div><button id="cancelMatchmaking" class="navBtn" style="display:none">CANCEL SEARCH</button></div>
+ <div id="joinBox" style="display:none"><div class="joinTitle">JOIN A ROOM</div><input id="code" type="text" placeholder="GAME CODE" maxlength="4" autocomplete="off"> <button id="join">JOIN / WATCH</button><small>Enter the 4-character Game Code. Waiting room = join as a pilot · live match = join as a spectator. In spectator mode, <b>TAB</b> = next pilot · <b>SHIFT+TAB</b> = previous pilot.</small><div id="navRow"><button id="backFromJoin" class="navBtn">← BACK</button></div></div>
+ <div id="legacyHubControls" hidden><div id="selectedModePanel"><div id="selectedModeTitle"></div><div id="selectedModeMeta"></div></div><div id="actionRow"><button id="quickMatch" class="actionBtn" style="display:none">PLAY ONLINE</button><button id="practiceMode" class="actionBtn" style="display:none">ENTER PRACTICE</button><button id="challengeMode" class="actionBtn" style="display:none">START FLIGHT CHALLENGE</button><button id="backToModes" class="navBtn">← BACK TO MODES</button></div></div>
+</main>
+</div></div>
 <div id="room" style="display:none">
 <h2 style="margin:4px"><span id="rmode"></span></h2>
 <h2 style="margin:4px">Game Code: <span id="rcode" style="letter-spacing:6px;font-size:2.2rem"></span></h2>
@@ -458,14 +567,16 @@ html,body{width:100%;height:100%;height:100dvh;overflow:hidden!important;overscr
 <p id="rstat"></p><div id="roomNav"><button id="leaveRoom" class="navBtn">← LEAVE ROOM</button><button id="start" style="display:none">Start game</button></div>
 </div></div>
 <button id="friendsToggle" class="friendsToggle" type="button" aria-controls="friendsSidebar" aria-expanded="false">👥 FRIENDS <span id="friendsToggleOnline">0 ONLINE</span></button>
-<aside id="friendsSidebar" class="friendsSidebar open" aria-label="MAYDAY friends sidebar">
+<aside id="friendsSidebar" class="friendsSidebar" aria-label="MAYDAY friends sidebar">
   <div class="friendsSidebarHeader"><div class="friendsSidebarHeading"><strong>FRIENDS</strong><small id="friendsSidebarOnlineCount">0 ONLINE</small></div><button id="closeFriendsSidebar" class="friendsClose" type="button" aria-label="Close friends sidebar">×</button></div>
   <div id="friendsSidebarPanel" class="socialPanel" aria-label="Friends, Game UID, and room invitations"></div>
 </aside>
-<div id="settingsPanel"><div id="settingsBox"><h3>⚙ MAYDAY SETTINGS</h3><div class="settingRow"><label><input id="mouseControls" type="checkbox"> Enable mouse flight controls</label><small>When enabled in a match: move mouse left/right = turn, move mouse up/down = pitch, hold left mouse = fire, hold right mouse = look back, middle click = shield (Clash Squad). Mouse locks automatically when the match starts; <b>Shift+F1</b> unlocks/locks it.</small></div><div class="settingRow"><label for="mouseSensitivity">Mouse sensitivity <input id="mouseSensitivity" type="range" min="1" max="200" step="1" value="100"></label><small><span id="mouseSensitivityValue">100%</span> · 100% is the current default; 200% is twice as sensitive. Applies to flight movement only.</small></div><div id="settingsActions"><button id="closeSettings" class="secondaryBtn">CLOSE</button></div></div></div>
+<div id="settingsPanel"><div id="settingsBox"><h3>⚙ MAYDAY SETTINGS</h3><div class="settingRow"><label><input id="mouseControls" type="checkbox"> Enable mouse flight controls</label><small>When enabled in a match: move mouse left/right = turn, move mouse up/down = pitch, hold left mouse = fire, hold right mouse = look back, middle click = shield (Clash Squad). Mouse locks automatically when the match starts; <b>Shift+F1</b> unlocks/locks it.</small></div><div class="settingRow"><label for="mouseSensitivity">Mouse sensitivity <input id="mouseSensitivity" type="range" min="1" max="200" step="1" value="100"></label><small><span id="mouseSensitivityValue">100%</span> · 100% is the current default; 200% is twice as sensitive. Applies to flight movement only.</small></div><div class="settingRow"><label><input type="checkbox" id="inv"> Inverted pitch (&uarr; = nose down, &darr; = nose up)</label></div><details class="settingRow" id="controlsHelp"><summary><b>CONTROLS &amp; HELP</b></summary><p><b>PC:</b> W accelerate · S brake · ↑/↓ pitch · A/D tilt · ←/→ turn · SPACE shoot · F missile · R flares · SHIFT boost. <b>Phones:</b> use the on-screen flight stick and action buttons; drag the open sky to look around. Use HUD SETTINGS to resize, fade, hide, or save layouts; ⚙ MOBILE adjusts sensitivity, handling, graphics, FPS, auto-level and vibration.</p>
+<p><b>Hold enemy in sights 3s = LOCK</b> · <b>Lock limit 4.2 km</b> · clouds can break lock · <b>O</b> hide/show sensitivity + settings · <b>C</b> camera · <b>Hold X</b> rear view · <b>I</b> invert pitch · <b>Tab</b> spectate · <b>Hold G for 1 second</b> to send a room-wide “MAYDAY” alert (Clash Squad) · <b>P</b> replay your last death when available · <b>Q</b> shield (Clash Squad, 7s) · <b>R</b> countermeasures · <b>SETTINGS</b> = optional mouse controls</p><p>🌲 Forests · ✈ 2 neutral air-landing runways with green edge lights · 🧭 Rotating map by default · <b>M</b> toggles North-up · 💥 crash fire & smoke</p>
+</details><div id="settingsActions"><button id="closeSettings" class="secondaryBtn">CLOSE</button></div></div></div>
 <div id="partyCodeDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="partyCodeDialogTitle"><div class="socialInviteBox"><h3 id="partyCodeDialogTitle">JOIN A PARTY</h3><p>Enter the six-character code shared by your friend.</p><input id="partyCodeInput" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123" style="width:100%;box-sizing:border-box;text-align:center;letter-spacing:.2em;font-size:1.2rem;text-transform:uppercase;margin:8px 0 14px"><div class="socialInviteActions"><button id="cancelPartyCode" class="declineSocial" type="button">CANCEL</button><button id="submitPartyCode" type="button">JOIN PARTY</button></div></div></div>
 <div id="socialPartyInviteDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="socialPartyInviteTitle"><div class="socialInviteBox"><h3 id="socialPartyInviteTitle">MAYDAY PARTY INVITATION</h3><p id="socialPartyInviteText">A friend invited you to join their online party.</p><div class="socialInviteActions"><button id="declineSocialPartyInvite" class="declineSocial" type="button">DECLINE</button><button id="acceptSocialPartyInvite" type="button">ACCEPT PARTY</button></div></div></div>
 <div id="socialInviteDialog" class="socialInvitePanel" role="dialog" aria-modal="true" aria-labelledby="socialInviteTitle"><div class="socialInviteBox"><h3 id="socialInviteTitle">MAYDAY ROOM INVITATION</h3><p id="socialInviteText"></p><div class="socialInviteActions"><button id="declineSocialInvite" class="declineSocial">DECLINE</button><button id="acceptSocialInvite">ACCEPT & JOIN</button></div></div></div>
 <div id="confirmDialog"><div id="confirmBox"><h3 id="confirmTitle">Leave?</h3><p id="confirmText"></p><div id="confirmActions"><button id="confirmCancel">CANCEL</button><button id="confirmOk">LEAVE</button></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/client.js?v=v79.9-party-invite-cancel-fix"></script></body></html>
+<script src="/client.js?v=v80.0-party-reliability-hub-lobby"></script></body></html>
