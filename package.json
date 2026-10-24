@@ -1,12 +1,14 @@
 {
   "name": "flight-battle",
-  "version": "77.1.0",
+  "version": "80.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check public/client.js",
     "test:matchmaking": "node --test tests/matchmaking.test.js",
-    "test:party-queue": "node --test tests/party-queue.test.js"
+    "test:party": "node --test tests/party.test.js",
+    "test:party-queue": "node --test tests/party-queue.test.js",
+    "test": "node --test tests/matchmaking.test.js tests/party.test.js tests/party-queue.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

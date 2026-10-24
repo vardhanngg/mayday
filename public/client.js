@@ -1,4 +1,4 @@
-const MAYDAY_BUILD='v79.9-party-invite-cancel-fix';
+const MAYDAY_BUILD='v80.0-party-reliability-hub-lobby';
 function inviteDebug(stage,details=''){console.info(`[MAYDAY ${MAYDAY_BUILD}][invite] ${stage}`,details)}
 
 try{const S=JSON.parse(localStorage.getItem('fb')||'{}');if(S.n)document.getElementById('name').value=S.n;if(S.inv)document.getElementById('inv').checked=true;if(S.t)document.getElementById('ptype').value=S.t;['sp','sr','sy'].forEach(k=>{if(S[k])document.getElementById(k).value=S[k]})}catch(e){}
@@ -347,7 +347,7 @@ document.getElementById('hudShowLabels')?.addEventListener('change',e=>{mobilePr
 document.getElementById('retryLandscapeBtn')?.addEventListener('click',requestLandscapeForGame);
 
 // Orientation locking must be requested within the user's tap gesture when supported.
-document.addEventListener('pointerdown',e=>{if(!mobileTouchEnabled||inGame)return;if(e.target.closest('#practiceMode,#challengeMode,#hostMode,#quickMatch,#join,#acceptSocialInvite,#start'))requestLandscapeForGame()},{capture:true});
+document.addEventListener('pointerdown',e=>{if(!mobileTouchEnabled||inGame)return;if(e.target.closest('.hubPlay,#practiceMode,#challengeMode,#hostMode,#quickMatch,#join,#acceptSocialInvite,#start'))requestLandscapeForGame()},{capture:true});
 function mobileSettingValue(id){return document.getElementById(id)}
 function syncMobileSettingsUi(){const setRange=(id,value,out,mult='×')=>{const el=mobileSettingValue(id),o=mobileSettingValue(out);if(el)el.value=value;if(o)o.textContent=Number(value).toFixed(1)+mult};setRange('mobileJoystickSensitivity',mobilePrefs.joystickSensitivity,'mobileJoystickSensitivityValue');setRange('mobileCameraSensitivity',mobilePrefs.cameraSensitivity,'mobileCameraSensitivityValue');for(const [id,key] of [['mobileInvertPitch','invertPitch'],['mobileAutoLevel','autoLevel'],['mobileShowFps','showFps'],['mobileVibrateHit','vibrateOnHit']]){const el=mobileSettingValue(id);if(el)el.checked=!!mobilePrefs[key]}const fm=mobileSettingValue('mobileFlightModel'),gp=mobileSettingValue('mobileGraphicsPreset'),support=mobileSettingValue('mobileVibrationSupport');if(fm)fm.value=mobilePrefs.flightModel;if(gp)gp.value=mobilePrefs.graphicsPreset;if(support)support.textContent=('vibrate' in navigator)?'':'Not supported'}
 function applyGraphicsPreset(preset,save=true){const allowed=['low','medium','high'];graphicsPreset=allowed.includes(preset)?preset:'medium';mobilePrefs.graphicsPreset=graphicsPreset;const cfg=graphicsPreset==='low'?{dpr:TOUCH_DEVICE ? .82 : 1,shadow:false,shadowSize:512,particles:150,fogNear:4300,fogFar:14000}:graphicsPreset==='medium'?{dpr:TOUCH_DEVICE?1.05:1.35,shadow:true,shadowSize:1024,particles:360,fogNear:5500,fogFar:17000}:{dpr:TOUCH_DEVICE?1.3:1.75,shadow:true,shadowSize:2048,particles:700,fogNear:6000,fogFar:18500};particleBudget=cfg.particles;graphicsFogNear=cfg.fogNear;graphicsFogFar=cfg.fogFar;ren.setPixelRatio(Math.min(devicePixelRatio,cfg.dpr));ren.setSize(innerWidth,innerHeight);ren.shadowMap.enabled=cfg.shadow;sun.castShadow=cfg.shadow;sun.shadow.mapSize.set(cfg.shadowSize,cfg.shadowSize);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null}ren.shadowMap.needsUpdate=true;scene.fog.near=cfg.fogNear;scene.fog.far=cfg.fogFar;if(save)persistMobilePreferences()}
@@ -1186,9 +1186,11 @@ function paintLobbyPartySlots(){
  const invite=document.getElementById('lobbyPartyInviteBtn');
  if(invite){invite.textContent=socialParty&&socialParty.leaderId!==socialProfile?.id?'PARTY MEMBER':'＋ INVITE FRIENDS';invite.disabled=!!(socialParty&&socialParty.leaderId!==socialProfile?.id)||!!(socialParty&&socialParty.members.length>=4);invite.title=invite.disabled?'Only the leader can invite, or the party is full.':'Invite friends from your friends list';}
 }
-function paintAllSocialPanels(){paintSocialPanel();paintLobbyPartySlots();const online=(socialSnapshot.friends||[]).filter(f=>f.online).length;const count=document.getElementById('friendsSidebarOnlineCount'),toggleCount=document.getElementById('friendsToggleOnline');if(count)count.textContent=`${online} ONLINE`;if(toggleCount)toggleCount.textContent=`${online} ONLINE`;refreshRoomSocialActions()}
+function paintAllSocialPanels(){paintSocialPanel();paintLobbyPartySlots();try{paintHub()}catch(e){}const online=(socialSnapshot.friends||[]).filter(f=>f.online).length;const count=document.getElementById('friendsSidebarOnlineCount'),toggleCount=document.getElementById('friendsToggleOnline');if(count)count.textContent=`${online} ONLINE`;if(toggleCount)toggleCount.textContent=`${online} ONLINE`;refreshRoomSocialActions()}
 function socialFeedback(root,msg){const el=root?.querySelector('.socialFeedback');if(el)el.textContent=msg||''}
+
 function bindSocialPanel(id){const root=document.getElementById(id);if(!root)return;root.addEventListener('click',async ev=>{const b=ev.target.closest('[data-social-action]');if(!b)return;const act=b.dataset.socialAction;if(act==='add'){const input=root.querySelector('.friendCodeEntry'),code=(input?.value||'').trim().toUpperCase();if(!/^\d{6}$/.test(code)){socialFeedback(root,'Enter the 6-digit Game UID.');input?.focus();return}if(sendSocial({t:'socialAddFriend',code})){socialFeedback(root,'Sending friend request...')}return}if(act==='copy'){try{await navigator.clipboard.writeText(socialProfile?.code||'');socialFeedback(root,'Game UID copied.')}catch{window.prompt('Copy your MAYDAY Game UID:',socialProfile?.code||'')}return}if(act==='accept'||act==='decline'){sendSocial({t:'socialFriendResponse',profileId:b.dataset.profileId,accept:act==='accept'});return}if(act==='invite'){if(!roomCode)return;sendSocial({t:'socialInviteFriend',friendId:b.dataset.friendId,roomCode});socialFeedback(root,'Sending private-room invitation...');return}if(act==='partyInvite'){b.disabled=true;b.textContent='SENDING...';const connected=!!(socialSocket&&socialSocket.readyState===WebSocket.OPEN);if(sendSocial({t:'socialPartyInvite',friendId:b.dataset.friendId})){socialFeedback(root,connected?'Party invitation sent. Waiting for your friend to accept.':'Friends connection is reconnecting. Party invitation queued and will send automatically.');setTimeout(()=>{if(b.isConnected){b.disabled=false;b.textContent='PARTY INVITE'}},2500)}else{socialFeedback(root,'Could not queue the party invitation. Please try again.');b.disabled=false;b.textContent='PARTY INVITE'}return}if(act==='partyLeave'){sendSocial({t:'socialPartyLeave'});return}});root.addEventListener('input',ev=>{if(ev.target.classList.contains('friendCodeEntry'))ev.target.value=ev.target.value.replace(/\D/g,'').slice(0,6)});root.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.classList.contains('friendCodeEntry')){ev.preventDefault();root.querySelector('[data-social-action="add"]')?.click()}})}
+
 function setFriendsSidebarOpen(open,persist=true){const sidebar=document.getElementById('friendsSidebar'),toggle=document.getElementById('friendsToggle'),lobby=document.getElementById('lobby');if(!sidebar||!toggle)return;sidebar.classList.toggle('open',!!open);sidebar.setAttribute('aria-hidden',String(!open));toggle.hidden=!!open;toggle.setAttribute('aria-expanded',String(!!open));lobby?.classList.toggle('withFriendsSidebar',!!open);if(persist){try{localStorage.setItem('maydayFriendsSidebarOpen',open?'1':'0')}catch{}}}
 function finishSocialInviteJoin(ok,code='',message='',spectator=false){if(!joiningSocialInviteId)return;const inviteId=joiningSocialInviteId;joiningSocialInviteId='';clearTimeout(inviteJoinWatchdog);inviteJoinWatchdog=0;inviteDebug('finish',`id=${inviteId.slice(0,8)} ok=${!!ok} code=${code||'-'} spectator=${!!spectator} message=${message||'-'}`);sendSocial({t:'socialJoinComplete',inviteId,ok:!!ok,code:String(code||'').toUpperCase(),message:String(message||''),spectator:!!spectator})}
 function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===WebSocket.OPEN||socialSocket?.readyState===WebSocket.CONNECTING)return;socialSocketConnecting=true;try{socialSocket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host)}catch{socialSocketConnecting=false;return}
@@ -1202,7 +1204,7 @@ function connectSocial(){if(socialSocketConnecting||socialSocket?.readyState===W
   if(m.t==='socialPartyState'){const previousParty=socialParty;socialParty=m.party||null;const codeBox=document.getElementById('lobbyPartyCodeDisplay');if(codeBox){if(socialParty?.code){codeBox.hidden=false;codeBox.style.display='block';codeBox.replaceChildren();codeBox.append(document.createTextNode('PARTY CODE: '));const partyCodeLabel=document.createElement('strong');partyCodeLabel.textContent=String(socialParty.code);const copy=document.createElement('button');copy.type='button';copy.textContent='COPY';copy.onclick=()=>{if(navigator.clipboard?.writeText)navigator.clipboard.writeText(String(socialParty.code)).then(()=>toast('Party code copied.')).catch(()=>toast('Copy failed. Select the code to copy it.'));else toast('Select and copy the party code.')};codeBox.append(partyCodeLabel,copy)}else{codeBox.hidden=true;codeBox.style.display='none';codeBox.textContent=''}}paintAllSocialPanels();const q=document.getElementById('quickMatch');if(q&&['ffa','clash','survivor'].includes(selectedMode))q.textContent=socialParty?(socialParty.leaderId===socialProfile?.id?'PLAY ONLINE WITH PARTY ('+socialParty.members.length+')':'WAIT FOR PARTY LEADER'):'PLAY ONLINE';if(partyAcceptPending){partyAcceptPending=false;clearTimeout(partyAcceptTimer);if(socialParty&&socialParty.members.some(x=>x.id===socialProfile?.id)){toast('Joined party: '+socialParty.members.map(x=>x.name).join(', '))}else toast('Party join was not confirmed. Ask the leader to send a new invite.')}else if(socialParty&&(!previousParty||previousParty.members.length!==socialParty.members.length))toast('Party updated: '+socialParty.members.map(x=>x.name).join(', '));return}
   if(m.t==='socialPartyInvite'){sendSocial({t:'socialPartyInviteReceived',inviteId:m.inviteId});showPartyInvitePrompt(m);return}
   if(m.t==='socialPartyQueueRequest'){matchmakingMode=m.mode;errEl.textContent='';matchmakingActive=true;updateMatchmakingUi('connecting',{mode:m.mode});connect({t:'matchmake',mode:m.mode,partyId:m.partyId});return}
-  if(m.t==='socialPartyQueueCancelRequest'){cancelMatchmaking(true);sendSocial({t:'socialPartyGet'});return}
+  if(m.t==='socialPartyQueueCancelRequest'){cancelMatchmaking(true);if(m.message)toast(m.message);sendSocial({t:'socialPartyGet'});return}
   if(m.t==='socialInvite'){incomingSocialInvites.push(m);showNextSocialInvite();return}
   if(m.t==='socialInviteResult'){if(m.message)toast(m.message);return}
   if(m.t==='socialJoinRoom'){inviteDebug('socialJoinRoom received',`id=${String(m.inviteId||'').slice(0,8)} room=${m.roomCode||'-'} state=${m.state||'-'}`);joinInvitedRoom(m.roomCode,m.inviteId);return}
@@ -1283,7 +1285,7 @@ fetch('/api/version',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{co
 document.getElementById('acceptSocialInvite')?.addEventListener('click',()=>respondSocialInvite(true));document.getElementById('declineSocialInvite')?.addEventListener('click',()=>respondSocialInvite(false));bindSocialPanel('friendsSidebarPanel');
 document.getElementById('room')?.addEventListener('click',ev=>{const b=ev.target.closest('[data-room-social-action]');if(b)sendRoomSocialAction(b)});
 document.getElementById('friendsToggle')?.addEventListener('click',()=>setFriendsSidebarOpen(true));document.getElementById('closeFriendsSidebar')?.addEventListener('click',()=>setFriendsSidebarOpen(false));
-try{const savedSidebar=localStorage.getItem('maydayFriendsSidebarOpen');setFriendsSidebarOpen(savedSidebar===null?true:savedSidebar==='1',false)}catch{setFriendsSidebarOpen(true,false)}
+setFriendsSidebarOpen(false,false);
 
 let selectedMode='';
 let matchmakingActive=false,matchmakingMode='',matchmakingElapsedSeconds=0;
@@ -1314,7 +1316,7 @@ function updateMatchmakingUi(state='idle',data={}){
     if(join)join.style.display=onlineMode?'inline-block':'none';
     return;
   }
-  if(panel)panel.style.display='block';
+  if(panel){panel.style.display='block';panel.classList.toggle('mmResult',!showSearch);clearTimeout(panel._hideTimer);if(!showSearch)panel._hideTimer=setTimeout(()=>{if(!matchmakingActive)panel.style.display='none'},3500)}
   if(state==='connecting'||state==='searching'){
     if(friend)friend.style.display='none';
     if(join)join.style.display='none';
@@ -1385,8 +1387,79 @@ function startPractice(){
   plane=makePlane(myColor,ptype);plane.userData.team=myTeam;plane.userData.col=myColor;ensureShield();shields=0;shieldUntil=0;RANGE=4000;reset();makePracticeArena();
   document.getElementById('lobby').style.display='none';showGameplayUi();document.getElementById('radar').style.display='block';winEl.style.display='none';bannerEl.textContent='';shieldHud.style.display='none';spectatorHud.style.display='none';setMusic(false);toast(`PRACTICE ARENA • ${practiceDifficulty.toUpperCase()} BOTS • ESC OR EXIT TO MAIN MENU`);
 }
-function resetModeSelection(){selectedMode='';matchmakingMode='';matchmakingActive=false;updateMatchmakingUi('idle',{});document.querySelectorAll('.modeCard').forEach(c=>c.classList.remove('selected'));document.querySelector('.modeGrid').style.display='grid';document.getElementById('selectedModePanel').style.display='none';document.getElementById('actionRow').style.display='none';document.getElementById('hostMode').style.display='inline-block';document.getElementById('joinMode').style.display='inline-block';document.getElementById('practiceMode').style.display='none';document.getElementById('challengeMode').style.display='none';document.getElementById('practiceSettings').style.display='none';document.getElementById('joinBox').style.display='none';document.getElementById('modeHelp').textContent='Select a mode to continue.';document.getElementById('code').value='';errEl.textContent=''}document.querySelectorAll('.modeCard').forEach(card=>card.onclick=()=>{selectedMode=card.dataset.mode;document.querySelectorAll('.modeCard').forEach(c=>c.classList.toggle('selected',c===card));const info=MODE_META[selectedMode];document.querySelector('.modeGrid').style.display='none';document.getElementById('selectedModePanel').style.display='block';document.getElementById('selectedModeTitle').textContent=info.name;document.getElementById('selectedModeMeta').textContent=info.help;document.getElementById('practiceSettings').style.display=selectedMode==='practice'?'block':'none';document.getElementById('actionRow').style.display='flex';const localMode=selectedMode==='practice'||selectedMode==='challenge';matchmakingMode=selectedMode;updateMatchmakingUi('idle',{mode:selectedMode});document.getElementById('hostMode').textContent='PLAY WITH FRIENDS';document.getElementById('joinMode').textContent='JOIN PRIVATE ROOM';document.getElementById('hostMode').style.display=localMode?'none':'inline-block';document.getElementById('joinMode').style.display=localMode?'none':'inline-block';document.getElementById('quickMatch').style.display=localMode?'none':'inline-block';document.getElementById('practiceMode').style.display=selectedMode==='practice'?'inline-block':'none';document.getElementById('challengeMode').style.display=selectedMode==='challenge'?'inline-block':'none';document.getElementById('joinBox').style.display='none';errEl.textContent='';document.getElementById('modeHelp').textContent=info.help});
+
+/* ===== MAYDAY hub lobby glue (v80) ===== */
+const HUB_ONLINE_MODES=['ffa','clash','survivor'];
+function hubSelectMode(mode){
+  if(!HUB_ONLINE_MODES.includes(mode))return;
+  selectedMode=mode;matchmakingMode=mode;
+  document.querySelectorAll('.hubCard').forEach(c=>c.classList.toggle('selected',c.dataset.mode===mode));
+  const lbl=document.getElementById('hubRoomMode');if(lbl)lbl.textContent='Play with your friends · '+MODE_META[mode].name;
+  const help=document.getElementById('modeHelp');if(help)help.textContent=MODE_META[mode].help;
+  errEl.textContent=''
+}
+function hubPlay(mode){
+  if(matchmakingActive){toast('Already searching. Cancel the search first.');return}
+  if(socialParty&&socialParty.leaderId!==socialProfile?.id&&HUB_ONLINE_MODES.includes(mode)){toast('Only your party leader can start matchmaking.');return}
+  document.getElementById('joinBox').style.display='none';errEl.textContent='';
+  if(mode==='practice'){startPractice();return}
+  if(mode==='challenge'){startFlightChallenge();return}
+  hubSelectMode(mode);document.getElementById('quickMatch').click()
+}
+function resetModeSelection(){
+  matchmakingActive=false;updateMatchmakingUi('idle',{});
+  document.getElementById('joinBox').style.display='none';document.getElementById('code').value='';errEl.textContent='';
+  hubSelectMode(HUB_ONLINE_MODES.includes(selectedMode)?selectedMode:'clash')
+}
+document.querySelectorAll('.hubCard').forEach(card=>{
+  card.addEventListener('click',ev=>{if(ev.target.closest('.hubPlay,select,label'))return;hubSelectMode(card.dataset.mode)});
+  card.addEventListener('keydown',ev=>{if((ev.key==='Enter'||ev.key===' ')&&ev.target===card){ev.preventDefault();hubSelectMode(card.dataset.mode)}})
+});
+document.querySelectorAll('.hubPlay').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();hubPlay(b.dataset.play)}));
 document.getElementById('backToModes').onclick=()=>{if(matchmakingActive)cancelMatchmaking();resetModeSelection()};
+document.getElementById('backFromJoin')?.addEventListener('click',()=>{document.getElementById('joinBox').style.display='none'});
+hubSelectMode('clash');
+/* nav, top bar */
+function hubToggleFriends(){const sb=document.getElementById('friendsSidebar');setFriendsSidebarOpen(!sb.classList.contains('open'),false)}
+document.getElementById('hubFriendsBtn').onclick=hubToggleFriends;
+document.getElementById('hubFriendsAll').onclick=()=>setFriendsSidebarOpen(true,false);
+document.querySelectorAll('.hubNavItem').forEach(b=>b.addEventListener('click',()=>{
+  const act=b.dataset.nav;
+  if(act==='friends'){hubToggleFriends();return}
+  if(act==='settings'){document.getElementById('openSettings').click();return}
+  if(act==='hangar'){const a=document.getElementById('hubAircraft');a.scrollIntoView({block:'center',behavior:'smooth'});a.classList.remove('pulse');void a.offsetWidth;a.classList.add('pulse');return}
+}));
+const hubNameInput=document.getElementById('name');
+function hubPaintPilot(){const n=(hubNameInput.value||'').trim();document.getElementById('hubAvatar').textContent=(n[0]||'P').toUpperCase();document.getElementById('hubHeadline').textContent=n?'READY FOR TAKEOFF, '+n.toUpperCase():'READY FOR TAKEOFF'}
+hubNameInput.addEventListener('input',hubPaintPilot);hubPaintPilot();
+/* aircraft picker (drives the original #ptype select) */
+const hubPlane=document.getElementById('ptype');
+function hubPaintAircraft(){const t=hubPlane.options[hubPlane.selectedIndex]?.text||'',parts=t.split('·').map(x=>x.trim());document.getElementById('acName').textContent=(parts[0]||'').toUpperCase();document.getElementById('acStats').textContent=parts.slice(1).join(' · ')}
+function hubCyclePlane(d){const n=hubPlane.options.length;hubPlane.selectedIndex=(hubPlane.selectedIndex+d+n)%n;hubPlane.dispatchEvent(new Event('change',{bubbles:true}))}
+document.getElementById('acPrev').onclick=()=>hubCyclePlane(-1);document.getElementById('acNext').onclick=()=>hubCyclePlane(1);
+hubPlane.addEventListener('change',()=>{hubPaintAircraft();try{saveSet()}catch{}});hubPaintAircraft();
+document.getElementById('lobbyPartyLeaveBtn')?.addEventListener('click',()=>{if(sendSocial({t:'socialPartyLeave'}))toast('Left the party.')});
+/* live roster-driven pieces: friends-online card, party line, leave button */
+function paintHub(){
+  const friends=(socialSnapshot.friends||[]).slice().sort((a,b)=>(b.online?1:0)-(a.online?1:0)||String(a.name).localeCompare(String(b.name)));
+  const online=friends.filter(f=>f.online).length,list=document.getElementById('hubFriendsList');
+  const cnt=document.getElementById('hubFriendsCount'),on=document.getElementById('hubFriendsOnline');if(cnt)cnt.textContent=online;if(on)on.textContent='('+online+')';
+  const me=socialProfile?.id,inParty=id=>!!socialParty&&socialParty.members.some(m=>m.id===id);
+  const canInvite=!!(socialProfile&&!roomCode&&!inGame&&(!socialParty||socialParty.leaderId===me)&&(!socialParty||socialParty.members.length<4)&&!(socialParty&&socialParty.mode));
+  if(list){
+    if(!socialProfile)list.innerHTML='<div class="hubEmpty">Connecting to friends…</div>';
+    else if(!friends.length)list.innerHTML='<div class="hubEmpty">No friends yet. Open Friends and add a pilot by Game UID.</div>';
+    else list.innerHTML=friends.slice(0,6).map(f=>{const st=String(f.status||'online'),free=f.online&&['lobby','online'].includes(st);let act='';
+      if(inParty(f.id))act='<span class="tag">IN PARTY</span>';
+      else if(free&&canInvite)act=`<button type="button" data-social-action="partyInvite" data-label="INVITE" data-friend-id="${esc(f.id)}">INVITE</button>`;
+      else if(f.online&&!free)act='<span class="tag">BUSY</span>';
+      return `<div class="hubFriend"><span class="socialDot ${f.online?'online':''}"></span><div><b>${esc(f.name)}</b><small>${esc(statusLabel(f))}</small></div>${act}</div>`}).join('')
+  }
+  const line=document.getElementById('hubPartyLine');
+  if(line)line.textContent=socialParty?('Squad of '+socialParty.members.length+' · '+socialParty.members.map(m=>m.name).join(', ')+(socialParty.mode?' · searching…':'')):'Flying solo. Invite friends to form a squad.';
+  const leave=document.getElementById('lobbyPartyLeaveBtn');if(leave)leave.hidden=!socialParty
+}
+bindSocialPanel('hubFriendsList');
 document.getElementById('lobbyPartyInviteBtn')?.addEventListener('click',()=>{setFriendsSidebarOpen(true);document.getElementById('friendsSidebarPanel')?.scrollIntoView({behavior:'smooth',block:'nearest'});toast('Choose PARTY INVITE beside an online friend.')});
 document.getElementById('lobbyPartyGenerateCode')?.addEventListener('click',()=>{sendPartyCodeActionWhenConnected({t:'socialPartyCreateCode'});toast('Generating party code...')});
 let pendingPartyCodeAction=null,partyCodeActionTimer=0;

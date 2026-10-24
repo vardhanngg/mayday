@@ -1,6 +1,6 @@
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
 const {WebSocketServer}=require('ws');
-const BUILD_VERSION='v79.0-bot-combat-fix';
+const BUILD_VERSION='v80.0-party-reliability-hub-lobby';
 const PORT=Number(process.env.PORT||3000),WIN_ROUNDS=6,WIN_KILLS=10,HP={fighter:75,balanced:100,heavy:150,interceptor:90,striker:175},PROT=3000,BREAK=5000,RESPAWN_DELAY=3500,RECONNECT_GRACE=600000,CLASH_STEALTH=4000,LOCK_RANGE=4200,MISSILE_RANGE=5200,LOCK_DURATION=3000,LOCK_HEARTBEAT_TIMEOUT=850;
 const PLANE_SPEED_MULT={fighter:1.15,balanced:1,heavy:.88,interceptor:1.34,striker:.82};
 const planeNormalMaxSpeed=p=>25+200*(PLANE_SPEED_MULT[p?.ty]||1);
@@ -91,28 +91,113 @@ const partyInviteCleanupTimer=setInterval(cleanupExpiredPartyInvites,30000);
 partyInviteCleanupTimer.unref?.();
 function partySnapshot(p){return {id:p.id,code:p.code||'',leaderId:p.leaderId,mode:p.mode||'',members:[...p.members].map(id=>socialStore.profiles[id]).filter(Boolean).map(x=>({id:x.id,name:x.name,code:x.code,online:!!socialSockets.get(x.id)&&socialSockets.get(x.id).readyState===1}))}}
 function publishParty(p){if(!p)return;const msg={t:'socialPartyState',party:partySnapshot(p)};for(const id of p.members){const sw=socialSockets.get(id);if(sw&&sw.readyState===1)send(sw,msg)}}
-function removePartyMember(id){
-  for(const p of socialParties.values()){
-    if(!p.members.has(id))continue;
-    cancelPartyQueue(p,'Party membership changed. Everybody must return to the lobby and start a new search.',{publish:false});
-    p.members.delete(id);
-    for(const [inviteId,invite] of pendingPartyInvites){
-      if(invite.partyId===p.id&&(invite.fromId===id||invite.toId===id))pendingPartyInvites.delete(inviteId);
+const PARTY_GRACE_MS=Number(process.env.MAYDAY_PARTY_GRACE_MS)||20000;
+
+function findPartyOf(id){
+  for(const p of socialParties.values())if(p.members.has(id))return p;
+  return null;
+}
+
+function partyQueueEntries(party){
+  const out=[];
+  for(const modeName of Object.keys(matchmakingQueues)){
+    for(const e of matchmakingQueues[modeName]){
+      if(e.partyId===party.id)out.push(e);
     }
-    if(p.members.size<2){
-      for(const left of p.members){
-        const sw=socialSockets.get(left);
-        if(sw&&sw.readyState===1)send(sw,{t:'socialPartyState',party:null});
+  }
+  return out;
+}
+
+function dissolveParty(p){
+  if(p.joinTimer)clearTimeout(p.joinTimer);
+  if(p.queueTimer)clearTimeout(p.queueTimer);
+  if(p.grace)for(const t of p.grace.values())clearTimeout(t);
+  for(const [k,inv] of pendingPartyInvites){
+    if(inv.partyId===p.id)pendingPartyInvites.delete(k);
+  }
+  socialParties.delete(p.id);
+}
+
+function removePartyMember(id){
+  const p=findPartyOf(id);
+  if(!p)return;
+
+  cancelPartyQueue(
+    p,
+    'Party membership changed because a pilot left, so matchmaking was cancelled.'
+  );
+
+  if(p.grace&&p.grace.has(id)){
+    clearTimeout(p.grace.get(id));
+    p.grace.delete(id);
+  }
+
+  for(const [inviteId,invite] of pendingPartyInvites){
+    if(invite.partyId===p.id&&
+       (invite.fromId===id||invite.toId===id)){
+      pendingPartyInvites.delete(inviteId);
+    }
+  }
+
+  p.members.delete(id);
+
+  if(p.members.size<2){
+    for(const left of p.members){
+      const sw=socialSockets.get(left);
+      if(sw&&sw.readyState===1){
+        send(sw,{t:'socialPartyState',party:null});
       }
-      socialParties.delete(p.id);
+    }
+    dissolveParty(p);
+    return;
+  }
+
+  if(p.leaderId===id)p.leaderId=p.members.values().next().value;
+  publishParty(p);
+}
+
+function schedulePartyGrace(id){
+  const p=findPartyOf(id);
+  if(!p)return;
+
+  if(p.mode){
+    cancelPartyQueue(
+      p,
+      'A party member went offline, so matchmaking was cancelled.'
+    );
+  }
+
+  publishParty(p);
+  p.grace=p.grace||new Map();
+
+  clearTimeout(p.grace.get(id));
+
+  p.grace.set(id,setTimeout(()=>{
+    const sw=socialSockets.get(id);
+
+    if(sw&&sw.readyState===1){
+      p.grace.delete(id);
       return;
     }
-    if(p.leaderId===id)p.leaderId=p.members.values().next().value;
-    publishParty(p);
-    return;
+
+    removePartyMember(id);
+  },PARTY_GRACE_MS));
+}
+
+function cancelPartyGrace(id){
+  const p=findPartyOf(id);
+  if(p&&p.grace&&p.grace.has(id)){
+    clearTimeout(p.grace.get(id));
+    p.grace.delete(id);
   }
 }
 
+setInterval(()=>{
+  const now=Date.now();
+  for(const [k,inv] of pendingPartyInvites){
+    if(inv.expiresAt<now)pendingPartyInvites.delete(k);
+  }
+},30000).unref();
 const hashToken=t=>crypto.createHash('sha256').update(String(t||'')).digest('hex');
 function saveSocial(){try{const tmp=SOCIAL_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(socialStore,null,2));fs.renameSync(tmp,SOCIAL_FILE)}catch(e){console.error('Could not save MAYDAY social data:',e.message)}}
 function safeName(n){return String(n||'Pilot').replace(/[<>\\\"']/g,'').trim().slice(0,14)||'Pilot'}
@@ -166,7 +251,7 @@ function handleSocialMessage(ws,m){
     const newName=suppliedName&&suppliedName.toLocaleLowerCase()!=='pilot'?safeName(suppliedName):safeName(profile.name||suppliedName);
     if(profile.name!==newName){profile.name=newName;saveSocial()}
     const old=socialSockets.get(profile.id);if(old&&old!==ws){old._socialReplaced=true;try{old.close(4001,'social session replaced')}catch{}}
-    ws.socialProfileId=profile.id;socialSockets.set(profile.id,ws);
+    ws.socialProfileId=profile.id;socialSockets.set(profile.id,ws);cancelPartyGrace(profile.id);
     const active=Object.values(rooms).find(r=>roomContainsProfile(r,profile.id));
     if(active){profile.roomCode=active.code;profile.mode=active.mode;profile.roomState=active.state;profile.status=[...active.spectators].some(sw=>sw.profileId===profile.id)?'spectating':(active.state==='playing'?'playing':active.state==='between'?'between':active.state==='over'?'results':'room')}
     else {profile.status='lobby';profile.roomCode='';profile.mode='';profile.roomState=''}
@@ -213,6 +298,7 @@ function handleSocialMessage(ws,m){
     if(party?.mode)return send(ws,{t:'socialActionResult',ok:false,message:'Party roster is locked during matchmaking. Cancel the search before inviting another pilot.'});
     if(!party){party={id:crypto.randomBytes(12).toString('hex'),code:crypto.randomBytes(3).toString('hex').toUpperCase(),leaderId:profile.id,members:new Set([profile.id]),mode:''};socialParties.set(party.id,party)}
     if(party.members.has(target.id)){publishParty(party);const targetSocket=socialSockets.get(target.id);if(targetSocket&&targetSocket.readyState===1)send(targetSocket,{t:'socialPartyState',party:partySnapshot(party)});return send(ws,{t:'socialActionResult',ok:true,message:`${target.name} is already in your party. Squad roster refreshed.`})}
+    if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'Cancel matchmaking before inviting more friends.'});
     if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'Parties can have up to 4 pilots.'});
     const inviteId=crypto.randomBytes(12).toString('hex');pendingPartyInvites.set(inviteId,{inviteId,partyId:party.id,fromId:profile.id,toId:target.id,expiresAt:Date.now()+90000});
     send(recipient,{t:'socialPartyInvite',inviteId,partyId:party.id,fromId:profile.id,fromName:profile.name,expiresAt:Date.now()+90000});
@@ -229,6 +315,7 @@ function handleSocialMessage(ws,m){
     if(party.mode){pendingPartyInvites.delete(inviteId);return send(ws,{t:'socialActionResult',ok:false,message:'That party is matchmaking. Ask the leader to invite you again after the search.'})}
     if(party.members.has(profile.id)){pendingPartyInvites.delete(inviteId);publishParty(party);return send(ws,{t:'socialActionResult',ok:true,message:'You are already in this party.'})}
     if(party.members.size>=4){pendingPartyInvites.delete(inviteId);return send(ws,{t:'socialActionResult',ok:false,message:'That party is full.'})}
+    if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'That party is searching for a match right now. Ask them to invite you again.'});
     const previousParty=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(previousParty&&previousParty.id!==party.id)removePartyMember(profile.id);
     pendingPartyInvites.delete(inviteId);
@@ -257,6 +344,7 @@ function handleSocialMessage(ws,m){
     if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'That party is matchmaking. Wait for the search to finish or be cancelled before joining.'});
     if(party.members.has(profile.id)){publishParty(party);return send(ws,{t:'socialActionResult',ok:true,message:'You are already in that party.'})}
     if(party.members.size>=4)return send(ws,{t:'socialActionResult',ok:false,message:'That party is full.'});
+    if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'That party is searching for a match right now. Try the code again in a moment.'});
     const previous=[...socialParties.values()].find(p=>p.members.has(profile.id));
     if(previous&&previous.id!==party.id)removePartyMember(profile.id);
     party.members.add(profile.id);publishParty(party);send(ws,{t:'socialPartyState',party:partySnapshot(party)});
@@ -267,19 +355,22 @@ function handleSocialMessage(ws,m){
   if(m.t==='socialPartyGet'){const party=[...socialParties.values()].find(p=>p.members.has(profile.id));send(ws,{t:'socialPartyState',party:party?partySnapshot(party):null});return}
   if(m.t==='socialPartyLeave'){removePartyMember(profile.id);send(ws,{t:'socialPartyState',party:null});return}
   if(m.t==='socialPartyCancel'){
-    const party=[...socialParties.values()].find(p=>p.members.has(profile.id));
-    if(!party)return;
-    cancelPartyQueue(party,'Party matchmaking cancelled.');
+    const party=findPartyOf(profile.id);
+    if(!party)return send(ws,{t:'socialPartyState',party:null});
+    cancelPartyQueue(party,(party.leaderId===profile.id
+      ?'Party matchmaking cancelled by the leader.'
+      :'Party matchmaking cancelled by '+profile.name+'.'));
     return
   }
   if(m.t==='socialPartyStart'){
-    const party=[...socialParties.values()].find(p=>p.members.has(profile.id)),mode=String(m.mode||'');
+    const party=findPartyOf(profile.id),mode=String(m.mode||'');
     if(!party||party.leaderId!==profile.id)return send(ws,{t:'socialActionResult',ok:false,message:'Only the party leader can start matchmaking.'});
     if(!['ffa','clash','survivor'].includes(mode))return send(ws,{t:'socialActionResult',ok:false,message:'Choose an online mode first.'});
     if(party.members.size>MATCHMAKING[mode].target)return send(ws,{t:'socialActionResult',ok:false,message:'Your party is too large for this mode.'});
     if(party.mode)return send(ws,{t:'socialActionResult',ok:false,message:'Your party is already matchmaking. Cancel the current search before starting another.'});
     const ids=[...party.members];
     if(ids.some(id=>{const p=socialStore.profiles[id],sw=socialSockets.get(id);return !p||!sw||sw.readyState!==1||['playing','spectating','between','results','room'].includes(p.status)}))return send(ws,{t:'socialActionResult',ok:false,message:'Every party member must be online and in the lobby.'});
+    if(partyQueueEntries(party).length)return send(ws,{t:'socialActionResult',ok:false,message:'Your party is already searching. Cancel first to change mode.'});
     party.mode=mode;
     party.queueStartedAt=Date.now();
     clearTimeout(party.queueTimer);
@@ -288,12 +379,18 @@ function handleSocialMessage(ws,m){
       const queuedIds=new Set((matchmakingQueues[mode]||[])
         .filter(entry=>entry.partyId===party.id&&entry.mode===mode&&entry.ws.readyState===1&&entry.ws.matchmakingEntry===entry)
         .map(entry=>entry.profileId));
-      if([...party.members].every(memberId=>queuedIds.has(memberId))){party.queueTimer=null;return}
+      if([...party.members].every(memberId=>queuedIds.has(memberId))){
+        party.queueTimer=null;
+        return;
+      }
       cancelPartyQueue(party,'Party matchmaking timed out because not every member joined the queue.');
     },PARTY_QUEUE_JOIN_TIMEOUT_MS);
     party.queueTimer.unref?.();
     publishParty(party);
-    for(const id of ids){const sw=socialSockets.get(id);if(sw)send(sw,{t:'socialPartyQueueRequest',partyId:party.id,mode,leaderId:party.leaderId})}
+    for(const id of ids){
+      const sw=socialSockets.get(id);
+      if(sw)send(sw,{t:'socialPartyQueueRequest',partyId:party.id,mode,leaderId:party.leaderId});
+    }
     return
   }
   if(m.t==='socialInviteFriend'){
@@ -511,7 +608,7 @@ function aiSpawnPosition(r,p){
 }
 
 const queueTimeoutOverride=Number(process.env.MAYDAY_MATCHMAKING_TIMEOUT_MS)||0;
-const PARTY_QUEUE_JOIN_TIMEOUT_MS=Math.max(500,Number(process.env.MAYDAY_PARTY_JOIN_TIMEOUT_MS)||12000);
+const PARTY_QUEUE_JOIN_TIMEOUT_MS=Math.max(100,Number(process.env.MAYDAY_PARTY_JOIN_TIMEOUT_MS||process.env.MAYDAY_PARTY_JOIN_MS)||12000);
 const MATCHMAKING={
   ffa:{target:8,minPlayers:1,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):20000},
   clash:{target:8,minPlayers:1,timeoutMs:queueTimeoutOverride?Math.max(250,queueTimeoutOverride):25000},
@@ -532,7 +629,7 @@ function publishMatchmakingQueue(mode,now=Date.now(),force=false){
     send(entry.ws,{t:'matchmaking',status:'searching',mode,players:queue.length,target:cfg.target,minPlayers:cfg.minPlayers,waitedSeconds:Math.max(0,Math.floor((now-entry.queuedAt)/1000)),position:i+1});
   }
 }
-function removeMatchmakingEntry(ws,status='cancelled',message=''){
+function removeMatchmakingEntry(ws,status='cancelled',message='',propagate=true){
   const entry=ws.matchmakingEntry;if(!entry)return false;
   const queue=matchmakingQueues[entry.mode]||[],idx=queue.indexOf(entry);
   if(idx>=0)queue.splice(idx,1);
@@ -540,6 +637,8 @@ function removeMatchmakingEntry(ws,status='cancelled',message=''){
   const cfg=MATCHMAKING[entry.mode];
   send(ws,{t:'matchmaking',status,mode:entry.mode,message,players:queue.length,target:cfg?.target||0,minPlayers:cfg?.minPlayers||2});
   publishMatchmakingQueue(entry.mode,Date.now(),true);
+  // One member leaving the search ends it for the whole party (never leave the rest on a dead countdown).
+  if(propagate&&entry.partyId&&status==='cancelled'){const party=socialParties.get(entry.partyId);if(party)cancelPartyQueue(party,'A party member cancelled matchmaking.')}
   return true;
 }
 function cancelPartyQueue(party,message='Party matchmaking cancelled.',options={}){
@@ -550,7 +649,7 @@ function cancelPartyQueue(party,message='Party matchmaking cancelled.',options={
     for(const entry of [...matchmakingQueues[modeName]]){
       if(entry.partyId===party.id){
         hadSearch=true;
-        removeMatchmakingEntry(entry.ws,'cancelled',message);
+        removeMatchmakingEntry(entry.ws,'cancelled',message,false);
       }
     }
   }
@@ -570,7 +669,7 @@ function cancelPartyQueue(party,message='Party matchmaking cancelled.',options={
 function queueForMatchmaking(ws,m){
   const mode=String(m.mode||''),cfg=MATCHMAKING[mode];if(!cfg)return send(ws,{t:'err',m:'Choose Dogfight, Clash Squad, or Survivor for online matchmaking.'});
   if(ws.room){const currentRoom=rooms[ws.room];if(currentRoom)return send(ws,{t:'err',m:'Leave your current room before searching for a match.'});ws.room=null;delete ws.id;delete ws.sessionToken;}
-  if(ws.matchmakingEntry){if(ws.matchmakingEntry.mode===mode&&ws.matchmakingEntry.partyId===(m.partyId||'')){publishMatchmakingQueue(mode,Date.now(),true);return}removeMatchmakingEntry(ws,'cancelled','Previous search cancelled.')}
+  if(ws.matchmakingEntry){if(ws.matchmakingEntry.mode===mode&&ws.matchmakingEntry.partyId===(m.partyId||'')){publishMatchmakingQueue(mode,Date.now(),true);return}removeMatchmakingEntry(ws,'cancelled','Previous search cancelled.',false)}
   const identity=authProfile(m.profileId,m.profileToken);
   let partyId='';if(m.partyId){if(!identity)return send(ws,{t:'err',m:'Sign in to your MAYDAY profile before party matchmaking.'});const party=socialParties.get(String(m.partyId));if(!party||!party.members.has(identity.id)||party.mode!==mode)return send(ws,{t:'err',m:'Your party is no longer ready. Return to the lobby and invite your friends again.'});partyId=party.id;if(party.members.size>cfg.target)return send(ws,{t:'err',m:'Your party is too large for this mode.'})}
   if(identity)for(const queuedMode of Object.keys(matchmakingQueues))for(const entry of [...matchmakingQueues[queuedMode]])if(entry.profileId===identity.id&&entry.ws!==ws)removeMatchmakingEntry(entry.ws,'replaced','Your MAYDAY profile started a new matchmaking search in another tab.');
@@ -613,6 +712,7 @@ function createQuickMatch(mode,batch){
     if(!party||group.length!==party.members.size||group.some(e=>!party.members.has(e.profileId))){
       for(const e of group)send(e.ws,{t:'matchmaking',status:'error',mode,message:'A party member disconnected before the match started. Invite everyone and search again.'});
       eligible=eligible.filter(e=>e.partyId!==partyId);
+      if(party){for(const e of batch)if(e.partyId===partyId&&e.ws.matchmakingEntry===e)e.ws.matchmakingEntry=null;cancelPartyQueue(party,'A party member disconnected before the match started.')}
     }
   }
   for(const entry of batch)if(entry.ws.matchmakingEntry===entry)entry.ws.matchmakingEntry=null;
@@ -1009,11 +1109,31 @@ wss.on('connection',ws=>{
   });
   ws.on('close',(code,reason)=>{
     if(ws.matchmakingEntry){
-      const entry=ws.matchmakingEntry,party=entry.partyId&&socialParties.get(entry.partyId);
-      if(party&&party.mode===entry.mode)cancelPartyQueue(party,'A party member disconnected during matchmaking.');
-      else removeMatchmakingEntry(ws,'cancelled','Connection closed.');
+      const entry=ws.matchmakingEntry;
+      const party=entry.partyId&&socialParties.get(entry.partyId);
+      if(party&&party.mode===entry.mode){
+        cancelPartyQueue(party,'A party member disconnected during matchmaking.');
+      }else{
+        removeMatchmakingEntry(ws,'cancelled','Connection closed.');
+      }
     }
-    if(ws.socialProfileId&&socialSockets.get(ws.socialProfileId)===ws){socialSockets.delete(ws.socialProfileId);const sp=socialStore.profiles[ws.socialProfileId];if(sp){sp.status='offline';sp.roomCode='';sp.mode='';sp.roomState='';refreshSocialNeighborhood(sp)}}const r=rooms[ws.room];if(!r)return;if(ws.spectator){r.spectators?.delete(ws);return;}const p=r.players[ws.id];if(!p||p.ws!==ws)return;
+    if(ws.socialProfileId&&socialSockets.get(ws.socialProfileId)===ws){
+      socialSockets.delete(ws.socialProfileId);
+      schedulePartyGrace(ws.socialProfileId);
+      const sp=socialStore.profiles[ws.socialProfileId];
+      if(sp){
+        sp.status='offline';
+        sp.roomCode='';
+        sp.mode='';
+        sp.roomState='';
+        refreshSocialNeighborhood(sp);
+      }
+    }
+    const r=rooms[ws.room];
+    if(!r)return;
+    if(ws.spectator){r.spectators?.delete(ws);return;}
+    const p=r.players[ws.id];
+    if(!p||p.ws!==ws)return;
     const explicitLeave=code===1000&&String(reason||'')==='left room';
     if(explicitLeave){
       delete r.players[ws.id];clearTimeout(p.reconnectTimer);
